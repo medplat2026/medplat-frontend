@@ -1,5 +1,6 @@
-import { HospitalValidationStep } from "@/components/onboarding/steps/hospital-validation-step";
+import { redirect } from "next/navigation";
+import { ROUTES } from "@/constants/routes";
 
 export default function HospitalValidationPage() {
-  return <HospitalValidationStep />;
+  redirect(ROUTES.onboarding.hospital.contact);
 }

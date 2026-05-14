@@ -1,17 +1,17 @@
 export const ROUTES = {
   home: "/",
   login: "/login",
+  dashboard: "/dashboard",
   onboarding: {
     hospital: {
       email: "/onboarding/hospital/email",
       verify: "/onboarding/hospital/verify",
       contact: "/onboarding/hospital/contact",
-      basics: "/onboarding/hospital/basics",
-      validation: "/onboarding/hospital/validation",
       password: "/onboarding/hospital/password",
     },
     patient: {
       email: "/onboarding/patient/email",
+      verify: "/onboarding/patient/verify",
       details: "/onboarding/patient/details",
       identification: "/onboarding/patient/identification",
       password: "/onboarding/patient/password",

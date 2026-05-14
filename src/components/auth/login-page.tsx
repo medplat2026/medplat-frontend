@@ -45,7 +45,7 @@ export function LoginPage() {
       await new Promise((r) => setTimeout(r, 450));
       if (demoSignInOk(email, password)) {
         toast.success("Signed in successfully.");
-        router.push(ROUTES.home);
+        router.push(ROUTES.dashboard);
         return;
       }
       setAuthError("Invalid email or password. Please try again.");

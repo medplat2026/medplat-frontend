@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
-import { ROUTES } from "@/constants/routes";
+import { PatientEmailStep } from "@/components/onboarding/steps/patient-email-step";
 
 export default function PatientEmailPage() {
-  redirect(ROUTES.onboarding.patient.details);
+  return <PatientEmailStep />;
 }
