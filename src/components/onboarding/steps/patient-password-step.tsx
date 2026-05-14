@@ -9,6 +9,7 @@ import { LabeledCheckbox } from "@/components/ui/labeled-checkbox";
 import { PasswordField } from "@/components/ui/password-field";
 import { PasswordStrengthMeter } from "@/components/ui/password-strength-meter";
 import { ROUTES } from "@/constants/routes";
+import { PATIENT_ONBOARDING_STORAGE } from "@/constants/onboarding";
 import { CircleStepper } from "@/components/onboarding/circle-stepper";
 import { OnboardingHeading } from "@/components/onboarding/onboarding-heading";
 import { OnboardingHeroImage } from "@/components/onboarding/onboarding-hero-image";
@@ -17,8 +18,6 @@ import { OrDivider } from "@/components/onboarding/or-divider";
 import { SocialLoginButtons } from "@/components/onboarding/social-login-buttons";
 import { axiosInstance } from "@/lib/axios";
 import { cn } from "@/lib/utils";
-
-const PATIENT_REGISTRATION_DRAFT_KEY = "patient-registration-draft";
 
 type PatientRegistrationDraft = {
   first_name: string;
@@ -36,7 +35,15 @@ export function PatientPasswordStep() {
   const [registrationDraft, setRegistrationDraft] = useState<PatientRegistrationDraft | null>(null);
 
   useEffect(() => {
-    const serializedDraft = window.sessionStorage.getItem(PATIENT_REGISTRATION_DRAFT_KEY);
+    if (typeof window === "undefined") return;
+
+    if (window.sessionStorage.getItem(PATIENT_ONBOARDING_STORAGE.emailVerified) !== "true") {
+      toast.error("Please verify your email before continuing.");
+      router.replace(ROUTES.onboarding.patient.email);
+      return;
+    }
+
+    const serializedDraft = window.sessionStorage.getItem(PATIENT_ONBOARDING_STORAGE.registrationDraft);
     if (!serializedDraft) {
       toast.error("Please complete your basic details first.");
       router.replace(ROUTES.onboarding.patient.details);
@@ -50,7 +57,7 @@ export function PatientPasswordStep() {
       }
       setRegistrationDraft(parsedDraft);
     } catch {
-      window.sessionStorage.removeItem(PATIENT_REGISTRATION_DRAFT_KEY);
+      window.sessionStorage.removeItem(PATIENT_ONBOARDING_STORAGE.registrationDraft);
       toast.error("Your registration details are invalid. Please try again.");
       router.replace(ROUTES.onboarding.patient.details);
     }
@@ -75,6 +82,12 @@ export function PatientPasswordStep() {
       return;
     }
 
+    if (typeof window !== "undefined" && window.sessionStorage.getItem(PATIENT_ONBOARDING_STORAGE.emailVerified) !== "true") {
+      toast.error("Please verify your email before continuing.");
+      router.replace(ROUTES.onboarding.patient.email);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await axiosInstance.post("/auth/auth/register/", {
@@ -82,7 +95,9 @@ export function PatientPasswordStep() {
         password,
         password_confirm: confirmPassword,
       });
-      window.sessionStorage.removeItem(PATIENT_REGISTRATION_DRAFT_KEY);
+      window.sessionStorage.removeItem(PATIENT_ONBOARDING_STORAGE.emailVerified);
+      window.sessionStorage.removeItem(PATIENT_ONBOARDING_STORAGE.verifiedEmail);
+      window.sessionStorage.removeItem(PATIENT_ONBOARDING_STORAGE.registrationDraft);
       toast.success("Patient account created successfully.");
       router.push(ROUTES.login);
     } catch {
@@ -148,7 +163,7 @@ export function PatientPasswordStep() {
         <SocialLoginButtons />
         <p className="text-center text-sm text-muted-foreground">
           Don&apos;t have an account?{" "}
-          <Link className="font-semibold text-onboarding-blue hover:underline" href={ROUTES.onboarding.patient.details}>
+          <Link className="font-semibold text-onboarding-blue hover:underline" href={ROUTES.onboarding.patient.email}>
             Register now
           </Link>
         </p>
