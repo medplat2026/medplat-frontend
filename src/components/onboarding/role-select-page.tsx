@@ -23,7 +23,7 @@ export function RoleSelectPage() {
       router.push(ROUTES.onboarding.hospital.email);
       return;
     }
-    router.push(ROUTES.onboarding.patient.details);
+    router.push(ROUTES.onboarding.patient.email);
   };
 
   return (

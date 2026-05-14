@@ -1,5 +1,6 @@
-import { PatientIdentificationStep } from "@/components/onboarding/steps/patient-identification-step";
+import { redirect } from "next/navigation";
+import { ROUTES } from "@/constants/routes";
 
 export default function PatientIdentificationPage() {
-  return <PatientIdentificationStep />;
+  redirect(ROUTES.onboarding.patient.email);
 }

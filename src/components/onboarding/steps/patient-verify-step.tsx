@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { ROUTES } from "@/constants/routes";
-import { HOSPITAL_ONBOARDING_STORAGE } from "@/constants/onboarding";
+import { PATIENT_ONBOARDING_STORAGE } from "@/constants/onboarding";
 import { OtpInputGroup } from "@/components/onboarding/otp-input-group";
 import { OnboardingHeading } from "@/components/onboarding/onboarding-heading";
 import { OnboardingHeroImage } from "@/components/onboarding/onboarding-hero-image";
@@ -17,7 +17,7 @@ import { isValidEmail } from "@/lib/contact-validation";
 
 const OTP_LENGTH = 5;
 
-export function HospitalVerifyStep() {
+export function PatientVerifyStep() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = useMemo(() => (searchParams.get("email") ?? "").trim(), [searchParams]);
@@ -25,8 +25,8 @@ export function HospitalVerifyStep() {
 
   useEffect(() => {
     if (!email || !isValidEmail(email)) {
-      toast.error("Please start registration with a valid work email.");
-      router.replace(ROUTES.onboarding.hospital.email);
+      toast.error("Please start registration with a valid email.");
+      router.replace(ROUTES.onboarding.patient.email);
     }
   }, [email, router]);
 
@@ -35,7 +35,7 @@ export function HospitalVerifyStep() {
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!email || !isValidEmail(email)) {
-      router.replace(ROUTES.onboarding.hospital.email);
+      router.replace(ROUTES.onboarding.patient.email);
       return;
     }
     if (!canSubmit) {
@@ -44,12 +44,12 @@ export function HospitalVerifyStep() {
     }
 
     if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(HOSPITAL_ONBOARDING_STORAGE.emailVerified, "true");
-      window.sessionStorage.setItem(HOSPITAL_ONBOARDING_STORAGE.verifiedEmail, email.toLowerCase());
+      window.sessionStorage.setItem(PATIENT_ONBOARDING_STORAGE.emailVerified, "true");
+      window.sessionStorage.setItem(PATIENT_ONBOARDING_STORAGE.verifiedEmail, email.toLowerCase());
     }
 
-    toast.success("Email verified. Continue with your hospital details.");
-    router.push(`${ROUTES.onboarding.hospital.contact}?email=${encodeURIComponent(email)}`);
+    toast.success("Email verified. Continue with your details.");
+    router.push(`${ROUTES.onboarding.patient.details}?email=${encodeURIComponent(email)}`);
   };
 
   const handleResend = () => {
@@ -62,7 +62,7 @@ export function HospitalVerifyStep() {
 
   return (
     <OnboardingScaffold
-      hero={<OnboardingHeroImage alt="Verify your hospital email" carouselActiveIndex={0} />}
+      hero={<OnboardingHeroImage alt="Verify your email" carouselActiveIndex={0} />}
     >
       <div className="flex min-h-0 w-full flex-1 flex-col justify-center gap-8">
         <OnboardingHeading
@@ -89,7 +89,7 @@ export function HospitalVerifyStep() {
         <SocialLoginButtons />
         <p className="text-center text-sm text-muted-foreground">
           Wrong email?{" "}
-          <Link className="font-semibold text-onboarding-blue hover:underline" href={ROUTES.onboarding.hospital.email}>
+          <Link className="font-semibold text-onboarding-blue hover:underline" href={ROUTES.onboarding.patient.email}>
             Go back
           </Link>
         </p>

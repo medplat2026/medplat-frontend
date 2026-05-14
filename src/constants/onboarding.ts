@@ -36,9 +36,16 @@ export const PATIENT_IDENTIFICATION_DOC_OPTIONS: Array<{
   { value: "voters", label: "Voter's card" },
 ];
 
-export const FACILITY_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "general", label: "General Hospital" },
-  { value: "specialty", label: "Specialty Hospital" },
-  { value: "clinic", label: "Clinic" },
-  { value: "diagnostic", label: "Diagnostic Centre" },
-];
+/** Session keys for hospital signup after email verification. */
+export const HOSPITAL_ONBOARDING_STORAGE = {
+  emailVerified: "hospital-onboarding-email-verified",
+  verifiedEmail: "hospital-onboarding-verified-email",
+  registrationDraft: "hospital-registration-draft",
+} as const;
+
+/** Session keys for patient signup after email verification. */
+export const PATIENT_ONBOARDING_STORAGE = {
+  emailVerified: "patient-onboarding-email-verified",
+  verifiedEmail: "patient-onboarding-verified-email",
+  registrationDraft: "patient-registration-draft",
+} as const;

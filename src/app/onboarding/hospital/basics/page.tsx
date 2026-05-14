@@ -1,5 +1,6 @@
-import { HospitalBasicsStep } from "@/components/onboarding/steps/hospital-basics-step";
+import { redirect } from "next/navigation";
+import { ROUTES } from "@/constants/routes";
 
 export default function HospitalBasicsPage() {
-  return <HospitalBasicsStep />;
+  redirect(ROUTES.onboarding.hospital.contact);
 }
