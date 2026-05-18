@@ -1,6 +1,8 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { getDashboardPageTitle } from "@/constants/dashboard-navigation";
 import { cn } from "@/lib/utils";
 
 type DashboardHeaderProps = {
@@ -18,6 +20,9 @@ function formatDashboardDate(d: Date): string {
 }
 
 export function DashboardHeader({ hospitalName, onMenuClick }: DashboardHeaderProps) {
+  const pathname = usePathname();
+  const isDashboardHome = pathname === "/dashboard";
+  const pageTitle = isDashboardHome ? `Welcome, ${hospitalName}` : getDashboardPageTitle(pathname);
   const today = new Date();
 
   return (
@@ -38,8 +43,13 @@ export function DashboardHeader({ hospitalName, onMenuClick }: DashboardHeaderPr
             </span>
           </Button>
           <div className="min-w-0">
-            <h1 className="truncate text-lg font-semibold tracking-tight text-foreground md:text-xl">
-              Welcome, {hospitalName}
+            <h1
+              className={cn(
+                "truncate text-lg tracking-tight text-foreground md:text-xl",
+                isDashboardHome ? "font-semibold" : "font-bold",
+              )}
+            >
+              {pageTitle}
             </h1>
             <p className="text-sm text-muted-foreground">{formatDashboardDate(today)}</p>
           </div>

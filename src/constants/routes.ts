@@ -2,6 +2,10 @@ export const ROUTES = {
   home: "/",
   login: "/login",
   dashboard: "/dashboard",
+  patients: "/patients",
+  cases: "/cases",
+  patientDetail: (id: string) => `/patients/${id}` as const,
+  patient: "/patient",
   onboarding: {
     hospital: {
       email: "/onboarding/hospital/email",

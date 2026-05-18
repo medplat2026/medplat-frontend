@@ -44,7 +44,7 @@ export function DashboardShell({
           sidebarCollapsed ? "lg:pl-[92px]" : "lg:pl-[260px]",
         )}
       >
-        <div className="no-scrollbar flex min-h-screen flex-col overflow-y-auto bg-white">
+        <div data-app-scroll-container="" className="no-scrollbar flex min-h-screen flex-col overflow-y-auto bg-white">
           <DashboardHeader
             hospitalName={hospitalName}
             onMenuClick={() => setSidebarOpen(true)}

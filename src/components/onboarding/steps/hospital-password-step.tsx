@@ -10,6 +10,7 @@ import { PasswordField } from "@/components/ui/password-field";
 import { PasswordStrengthMeter } from "@/components/ui/password-strength-meter";
 import { ROUTES } from "@/constants/routes";
 import { HOSPITAL_ONBOARDING_STORAGE } from "@/constants/onboarding";
+import { markHospitalProfileNeedsCompletion } from "@/lib/hospital-profile-storage";
 import { CircleStepper } from "@/components/onboarding/circle-stepper";
 import { OnboardingHeading } from "@/components/onboarding/onboarding-heading";
 import { OnboardingHeroImage } from "@/components/onboarding/onboarding-hero-image";
@@ -79,8 +80,9 @@ export function HospitalPasswordStep() {
       window.sessionStorage.removeItem(HOSPITAL_ONBOARDING_STORAGE.registrationDraft);
     }
 
+    markHospitalProfileNeedsCompletion();
     toast.success("Hospital account created (demo).");
-    router.push(ROUTES.home);
+    router.push(ROUTES.dashboard);
   };
 
   return (

@@ -43,6 +43,12 @@ export const HOSPITAL_ONBOARDING_STORAGE = {
   registrationDraft: "hospital-registration-draft",
 } as const;
 
+/** Post-onboarding hospital profile completion (dashboard modals). */
+export const HOSPITAL_PROFILE_STORAGE = {
+  needsCompletion: "hospital-profile-needs-completion",
+  complete: "hospital-profile-complete",
+} as const;
+
 /** Session keys for patient signup after email verification. */
 export const PATIENT_ONBOARDING_STORAGE = {
   emailVerified: "patient-onboarding-email-verified",

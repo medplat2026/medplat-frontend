@@ -48,7 +48,7 @@ export function SuccessConfirmModal({
     <dialog
       ref={ref}
       className={cn(
-        "fixed left-1/2 top-1/2 z-[60] w-[calc(100%-2rem)] max-w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[#E5E7EB] bg-[#DFE1E6] p-0 shadow-[0_20px_60px_rgba(15,23,42,0.12)] backdrop:bg-black/40 overscroll-contain",
+        "fixed left-1/2 top-1/2 z-[60] w-[calc(100%-2rem)] max-w-[500px] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-[#E5E7EB] bg-[#DFE1E6] p-0 shadow-[0_20px_60px_rgba(15,23,42,0.12)] backdrop:bg-black/40 overscroll-contain",
         className,
       )}
       onClose={() => onOpenChange(false)}

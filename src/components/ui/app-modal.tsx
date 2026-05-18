@@ -14,8 +14,8 @@ export type AppModalProps = {
   subtitle?: string;
   children: ReactNode;
   footer?: ReactNode;
-  /** Max width token: `lg` ≈ 32rem, `xl` ≈ 36rem, `2xl` ≈ 42rem */
-  size?: "lg" | "xl" | "2xl";
+  /** Max width: `lg` 32rem · `xl` 36rem · `2xl` 42rem · `3xl` 48rem · `4xl` 56rem · `5xl` 64rem */
+  size?: "lg" | "xl" | "2xl" | "3xl" | "4xl" | "5xl";
   className?: string;
 };
 
@@ -23,6 +23,9 @@ const sizeClass: Record<NonNullable<AppModalProps["size"]>, string> = {
   lg: "max-w-lg",
   xl: "max-w-xl",
   "2xl": "max-w-2xl",
+  "3xl": "max-w-3xl",
+  "4xl": "max-w-4xl",
+  "5xl": "max-w-5xl",
 };
 
 /**
@@ -36,7 +39,7 @@ export function AppModal({
   subtitle,
   children,
   footer,
-  size = "2xl",
+  size = "3xl",
   className,
 }: AppModalProps) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -57,13 +60,13 @@ export function AppModal({
     <dialog
       ref={ref}
       className={cn(
-        "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-white p-0 shadow-[0_20px_60px_rgba(15,23,42,0.15)] backdrop:bg-black/40 overscroll-contain",
+        "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-border bg-white p-0 shadow-[0_20px_60px_rgba(15,23,42,0.15)] backdrop:bg-black/40 overscroll-contain",
         sizeClass[size],
         className,
       )}
       onClose={() => onOpenChange(false)}
     >
-      <div className="flex max-h-[min(90dvh,880px)] flex-col">
+      <div className="flex max-h-[min(90dvh,880px)] flex-col overflow-hidden">
         <div className="shrink-0 border-b border-border px-6 pb-4 pt-5">
           <div className="relative pr-10">
             <button

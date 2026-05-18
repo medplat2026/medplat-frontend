@@ -1,7 +1,11 @@
 import { useEffect } from "react";
 
+/** Shell layouts mark their scroll column so overlays can hide nested overflow (body lock alone is not enough). */
+export const APP_SCROLL_CONTAINER_ATTR = "data-app-scroll-container";
+
 let lockDepth = 0;
 let snapshot: { htmlOverflow: string; bodyOverflow: string; bodyPaddingRight: string } | null = null;
+let containerSnapshots: { el: HTMLElement; overflow: string }[] | null = null;
 
 function scrollbarWidth(): number {
   if (typeof window === "undefined") return 0;
@@ -16,6 +20,11 @@ function acquireBodyScrollLock(): () => void {
       bodyOverflow: document.body.style.overflow,
       bodyPaddingRight: document.body.style.paddingRight,
     };
+    containerSnapshots = [];
+    document.querySelectorAll<HTMLElement>(`[${APP_SCROLL_CONTAINER_ATTR}]`).forEach((el) => {
+      containerSnapshots!.push({ el, overflow: el.style.overflow });
+      el.style.overflow = "hidden";
+    });
     const gap = scrollbarWidth();
     document.documentElement.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
@@ -29,6 +38,10 @@ function acquireBodyScrollLock(): () => void {
       document.body.style.overflow = snapshot.bodyOverflow;
       document.body.style.paddingRight = snapshot.bodyPaddingRight;
       snapshot = null;
+      containerSnapshots?.forEach(({ el, overflow }) => {
+        el.style.overflow = overflow;
+      });
+      containerSnapshots = null;
     }
   };
 }

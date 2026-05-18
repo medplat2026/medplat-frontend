@@ -1,6 +1,13 @@
 "use client";
 
-import { useId, useRef, useState, type RefObject } from "react";
+import { useId, useRef, useState } from "react";
+import {
+  allDocumentsUploaded,
+  createEmptyDocumentUploads,
+  DocumentsDetailsChevron,
+  SequentialDocumentsUpload,
+  type DocumentUploadsMap,
+} from "@/components/dashboard/sequential-documents-upload";
 import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/Button";
 import { ModalFormField } from "@/components/ui/modal-form-field";
@@ -26,6 +33,18 @@ const contactOptions = [
   { value: "sms", label: "SMS" },
 ];
 
+const REQUIRED_PATIENT_DOCUMENTS = [
+  { id: "doctors_report", label: "Doctor's report", fieldName: "documentDoctorsReport" },
+  { id: "hospital_bill", label: "Hospital bill / estimate", fieldName: "documentHospitalBill" },
+  { id: "valid_id", label: "Valid ID card", fieldName: "documentValidId" },
+] as const;
+
+type PatientDocumentId = (typeof REQUIRED_PATIENT_DOCUMENTS)[number]["id"];
+
+type PatientDocumentsMap = DocumentUploadsMap<PatientDocumentId>;
+
+const EMPTY_PATIENT_DOCUMENTS = createEmptyDocumentUploads(REQUIRED_PATIENT_DOCUMENTS);
+
 type CreatePatientModalProps = {
   triggerClassName?: string;
 };
@@ -43,17 +62,27 @@ export function CreatePatientModal({ triggerClassName }: CreatePatientModalProps
   stepRef.current = step;
   const [successOpen, setSuccessOpen] = useState(false);
   const [successPatientFirstName, setSuccessPatientFirstName] = useState("");
+  const [patientDocuments, setPatientDocuments] = useState<PatientDocumentsMap>(EMPTY_PATIENT_DOCUMENTS);
+  const [documentsValidationError, setDocumentsValidationError] = useState(false);
   const formId = useId();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function resetPatientDocuments() {
+    setPatientDocuments(EMPTY_PATIENT_DOCUMENTS);
+    setDocumentsValidationError(false);
+  }
 
   function resetCreateFlow() {
     setOpen(false);
     setStep(1);
+    resetPatientDocuments();
   }
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
-    if (!next) setStep(1);
+    if (!next) {
+      setStep(1);
+      resetPatientDocuments();
+    }
   }
 
   function handleSuccessOpenChange(next: boolean) {
@@ -70,7 +99,7 @@ export function CreatePatientModal({ triggerClassName }: CreatePatientModalProps
       <AppModal
         open={open}
         onOpenChange={handleOpenChange}
-        size="2xl"
+        size="3xl"
         progress={<ModalStepProgress currentStep={step} totalSteps={2} />}
         title="Create New Patient"
         subtitle={
@@ -116,8 +145,17 @@ export function CreatePatientModal({ triggerClassName }: CreatePatientModalProps
             // Single <form> wraps both steps; implicit submit (e.g. Enter) or stray submits must not
             // complete the flow until the user is on step 2 and submits intentionally.
             if (stepRef.current !== 2) return;
+            if (!allDocumentsUploaded(REQUIRED_PATIENT_DOCUMENTS, patientDocuments)) {
+              setDocumentsValidationError(true);
+              return;
+            }
+            setDocumentsValidationError(false);
             const fd = new FormData(e.currentTarget);
             const fullName = String(fd.get("fullName") ?? "");
+            for (const doc of REQUIRED_PATIENT_DOCUMENTS) {
+              const file = patientDocuments[doc.id];
+              if (file) fd.append(doc.fieldName, file);
+            }
             setSuccessPatientFirstName(firstNameFromFullName(fullName));
             resetCreateFlow();
             setSuccessOpen(true);
@@ -127,7 +165,15 @@ export function CreatePatientModal({ triggerClassName }: CreatePatientModalProps
             <StepOneFields formId={formId} />
           </div>
           <div hidden={step !== 2}>
-            <StepTwoFields formId={formId} fileInputRef={fileInputRef} />
+            <StepTwoFields
+              formId={formId}
+              uploads={patientDocuments}
+              onUploadsChange={(next) => {
+                setPatientDocuments(next);
+                if (allDocumentsUploaded(REQUIRED_PATIENT_DOCUMENTS, next)) setDocumentsValidationError(false);
+              }}
+              showDocumentsError={documentsValidationError}
+            />
           </div>
         </form>
       </AppModal>
@@ -159,7 +205,7 @@ function StepOneFields({ formId }: { formId: string }) {
           control="input"
           id={`${formId}-dob`}
           name="dateOfBirth"
-          type="text"
+          type="date"
           label="Date of Birth"
           placeholder="Select your date of birth"
           autoComplete="bday"
@@ -245,7 +291,17 @@ function StepOneFields({ formId }: { formId: string }) {
   );
 }
 
-function StepTwoFields({ formId, fileInputRef }: { formId: string; fileInputRef: RefObject<HTMLInputElement | null> }) {
+function StepTwoFields({
+  formId,
+  uploads,
+  onUploadsChange,
+  showDocumentsError,
+}: {
+  formId: string;
+  uploads: PatientDocumentsMap;
+  onUploadsChange: (uploads: PatientDocumentsMap) => void;
+  showDocumentsError: boolean;
+}) {
   const fileInputId = `${formId}-patient-docs`;
 
   return (
@@ -294,101 +350,20 @@ function StepTwoFields({ formId, fileInputRef }: { formId: string; fileInputRef:
         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
           <span>Select documents</span>
           <span className="text-muted-foreground transition-transform group-open:rotate-180" aria-hidden>
-            <ChevronDownSummary />
+            <DocumentsDetailsChevron />
           </span>
         </summary>
         <div className="border-t border-border px-4 pb-4 pt-3">
-          <div className="grid gap-4 md:grid-cols-2">
-            <DocumentUploadBox fileInputId={fileInputId} fileInputRef={fileInputRef} />
-            <DocumentChecklist />
-          </div>
+          <SequentialDocumentsUpload
+            documents={REQUIRED_PATIENT_DOCUMENTS}
+            fileInputId={fileInputId}
+            uploads={uploads}
+            onUploadsChange={onUploadsChange}
+            showError={showDocumentsError}
+            completeMessage="You can submit the patient profile."
+          />
         </div>
       </details>
     </div>
-  );
-}
-
-function DocumentUploadBox({
-  fileInputId,
-  fileInputRef,
-}: {
-  fileInputId: string;
-  fileInputRef: RefObject<HTMLInputElement | null>;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-input-border bg-muted/40 px-4 py-8 text-center">
-      <UploadIcon className="mb-3 text-onboarding-blue" />
-      <p className="text-sm font-semibold text-foreground">Upload medical documents</p>
-      <p className="mt-1 text-xs text-muted-foreground">PDF, JPG, PNG up to 10MB each</p>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".pdf,.jpg,.jpeg,.png"
-        multiple
-        className="sr-only"
-        id={fileInputId}
-        name="medicalDocuments"
-      />
-      <label htmlFor={fileInputId} className="mt-4 inline-block">
-        <span className="inline-flex cursor-pointer rounded-xl bg-onboarding-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-onboarding-blue-hover">
-          Choose Files
-        </span>
-      </label>
-    </div>
-  );
-}
-
-function DocumentChecklist() {
-  const items = [
-    { label: "Doctor's report", done: true },
-    { label: "Hospital bill / estimate", done: false },
-    { label: "Valid ID card", done: false },
-  ] as const;
-
-  return (
-    <ul className="space-y-3 rounded-xl border border-input-border bg-white p-4">
-      {items.map((item) => (
-        <li key={item.label} className="flex items-center gap-3 text-sm text-foreground">
-          <span
-            className={cn(
-              "flex size-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold",
-              item.done
-                ? "border-emerald-500 bg-emerald-500 text-white"
-                : "border-[#e8ecf1] bg-white text-muted-foreground/35",
-            )}
-            aria-hidden
-          >
-            ✓
-          </span>
-          {item.label}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function UploadIcon({ className }: { className?: string }) {
-  return (
-    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
-      <path
-        d="M12 4v12m0 0 3.5-3.5M12 16 8.5 12.5M4 17h16"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function ChevronDownSummary() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
-      <path
-        fillRule="evenodd"
-        d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.25a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-        clipRule="evenodd"
-      />
-    </svg>
   );
 }

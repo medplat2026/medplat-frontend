@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { CreateCaseModal } from "@/components/dashboard/create-case-modal";
 import { CreatePatientModal } from "@/components/dashboard/create-patient-modal";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
@@ -353,20 +354,23 @@ function FilterIcon({ className }: { className?: string }) {
 
 export function DashboardOverview() {
   return (
-    <div className="space-y-8">
+    <div className="space-y-12">
+      <div className="flex flex-wrap items-center justify-end gap-3 mt-4">
+        <CreatePatientModal />
+        <CreateCaseModal />
+      </div>
+
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((s) => (
           <StatCard key={s.label} {...s} />
         ))}
       </section>
 
-      <div className="flex flex-wrap gap-3">
+      {/* Button in between the stats and the quick actions */}
+      {/* <div className="flex flex-wrap gap-3">
         <CreatePatientModal />
-        <Button type="button" variant="outline" className="rounded-xl border-onboarding-blue px-5 text-onboarding-blue">
-          + Create Case
-        </Button>
-      </div>
-
+        <CreateCaseModal />
+      </div> */}
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <div className="min-w-0 rounded-2xl border border-border bg-white px-6 pb-6 pt-5 shadow-sm">
           <div className="border-b border-border pb-4">
@@ -497,7 +501,7 @@ export function DashboardOverview() {
 
         <div className="mt-6 flex justify-end">
           <Link
-            href="/dashboard/cases"
+            href="/cases"
             className="inline-flex items-center justify-center rounded-xl bg-onboarding-blue px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-onboarding-blue-hover"
           >
             View all
