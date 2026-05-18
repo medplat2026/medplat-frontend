@@ -1,3 +1,5 @@
+import { ROUTES } from "@/constants/routes";
+
 export type DashboardNavIcon =
   | "dashboard"
   | "patients"
@@ -16,8 +18,8 @@ export type DashboardNavItem = {
 export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: "dashboard" },
   { label: "Patients", href: "/patients", icon: "patients" },
-  { label: "Cases", href: "/cases", icon: "cases" },
-  { label: "Update", href: "/dashboard/update", icon: "update" },
+  { label: "Cases", href: ROUTES.cases, icon: "cases" },
+  { label: "Update", href: ROUTES.update, icon: "update" },
   {
     label: "Notification",
     href: "/dashboard/notifications",
@@ -32,8 +34,18 @@ const DASHBOARD_PAGE_NAV_ITEMS = DASHBOARD_NAV_ITEMS.filter(
 );
 
 const DASHBOARD_PAGE_TITLE_OVERRIDES: Record<string, string> = {
-  "/cases": "Patient Cases",
+  [ROUTES.cases]: "Patient Cases",
+  [ROUTES.update]: "Patient Treatment Update",
 };
+
+const DASHBOARD_PAGE_SUBTITLE_SUFFIX: Record<string, string> = {
+  [ROUTES.update]: "Track and document patient treatment update",
+};
+
+/** Optional suffix appended after the formatted date in the dashboard header. */
+export function getDashboardPageSubtitleSuffix(pathname: string): string | undefined {
+  return DASHBOARD_PAGE_SUBTITLE_SUFFIX[pathname];
+}
 
 /** Resolves the dashboard header title from the current pathname. */
 export function getDashboardPageTitle(pathname: string): string {

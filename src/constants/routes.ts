@@ -4,6 +4,7 @@ export const ROUTES = {
   dashboard: "/dashboard",
   patients: "/patients",
   cases: "/cases",
+  update: "/update",
   patientDetail: (id: string) => `/patients/${id}` as const,
   patient: "/patient",
   onboarding: {

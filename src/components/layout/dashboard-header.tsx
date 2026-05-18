@@ -2,7 +2,10 @@
 
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/Button";
-import { getDashboardPageTitle } from "@/constants/dashboard-navigation";
+import {
+  getDashboardPageSubtitleSuffix,
+  getDashboardPageTitle,
+} from "@/constants/dashboard-navigation";
 import { cn } from "@/lib/utils";
 
 type DashboardHeaderProps = {
@@ -23,7 +26,10 @@ export function DashboardHeader({ hospitalName, onMenuClick }: DashboardHeaderPr
   const pathname = usePathname();
   const isDashboardHome = pathname === "/dashboard";
   const pageTitle = isDashboardHome ? `Welcome, ${hospitalName}` : getDashboardPageTitle(pathname);
+  const subtitleSuffix = getDashboardPageSubtitleSuffix(pathname);
   const today = new Date();
+  const dateLine = formatDashboardDate(today);
+  const subtitle = subtitleSuffix ? `${dateLine}, ${subtitleSuffix}` : dateLine;
 
   return (
     <header className="sticky top-0 z-20 border-b border-border/80 bg-white/95 px-4 py-4 backdrop-blur-sm md:px-6 lg:px-8">
@@ -51,7 +57,7 @@ export function DashboardHeader({ hospitalName, onMenuClick }: DashboardHeaderPr
             >
               {pageTitle}
             </h1>
-            <p className="text-sm text-muted-foreground">{formatDashboardDate(today)}</p>
+            <p className="text-sm text-muted-foreground">{subtitle}</p>
           </div>
         </div>
         <button
