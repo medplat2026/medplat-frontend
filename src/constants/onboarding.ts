@@ -25,6 +25,9 @@ export const HERO_IMAGE = {
     "https://images.unsplash.com/photo-1516549655169-83429d14fe20?auto=format&fit=crop&w=1600&q=80",
 } as const;
 
+/** Email verification OTP length (patient + hospital). */
+export const ONBOARDING_OTP_DIGITS = 4;
+
 /** Patient step 2 — means of identification */
 export const PATIENT_IDENTIFICATION_DOC_OPTIONS: Array<{
   value: string;
@@ -40,6 +43,10 @@ export const PATIENT_IDENTIFICATION_DOC_OPTIONS: Array<{
 export const HOSPITAL_ONBOARDING_STORAGE = {
   emailVerified: "hospital-onboarding-email-verified",
   verifiedEmail: "hospital-onboarding-verified-email",
+  /** Numeric `uid` from initiate — required for verify_email. */
+  verifyEmailUid: "hospital-onboarding-verify-email-uid",
+  /** Same user id after verify — required for register_hospital. */
+  registerHospitalUid: "hospital-onboarding-register-uid",
   registrationDraft: "hospital-registration-draft",
 } as const;
 
@@ -53,5 +60,7 @@ export const HOSPITAL_PROFILE_STORAGE = {
 export const PATIENT_ONBOARDING_STORAGE = {
   emailVerified: "patient-onboarding-email-verified",
   verifiedEmail: "patient-onboarding-verified-email",
+  verifyEmailUid: "patient-onboarding-verify-email-uid",
+  registerPatientUid: "patient-onboarding-register-uid",
   registrationDraft: "patient-registration-draft",
 } as const;

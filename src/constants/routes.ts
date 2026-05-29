@@ -1,12 +1,23 @@
 export const ROUTES = {
   home: "/",
   login: "/login",
-  dashboard: "/dashboard",
-  patients: "/patients",
-  cases: "/cases",
-  update: "/update",
-  patientDetail: (id: string) => `/patients/${id}` as const,
-  patient: "/patient",
+  hospital: {
+    dashboard: "/hospital/dashboard",
+    patients: "/hospital/patients",
+    cases: "/hospital/cases",
+    update: "/hospital/update",
+    patientDetail: (id: string) => `/hospital/patients/${id}` as const,
+    notifications: "/hospital/dashboard/notifications",
+    settings: "/hospital/dashboard/settings",
+  },
+  patient: {
+    dashboard: "/patient/dashboard",
+    cases: "/patient/dashboard/cases",
+    caseDetail: (id: string) => `/patient/dashboard/cases/${id}` as const,
+    funding: "/patient/dashboard/funding",
+    notifications: "/patient/dashboard/notifications",
+    settings: "/patient/dashboard/settings",
+  },
   onboarding: {
     hospital: {
       email: "/onboarding/hospital/email",

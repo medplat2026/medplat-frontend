@@ -4,13 +4,15 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { DASHBOARD_NAV_ITEMS, type DashboardNavIcon } from "@/constants/dashboard-navigation";
+import { ROUTES } from "@/constants/routes";
+import { clearAuthSession } from "@/lib/auth-session";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
 function isNavActive(pathname: string, href: string): boolean {
   if (href === "/login") return false;
-  if (href === "/dashboard") {
-    return pathname === "/dashboard" || pathname === "/dashboard/";
+  if (href === ROUTES.hospital.dashboard) {
+    return pathname === ROUTES.hospital.dashboard || pathname === `${ROUTES.hospital.dashboard}/`;
   }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -231,6 +233,7 @@ export function DashboardSidebar({
                   title={collapsed && !open ? item.label : undefined}
                   onClick={() => {
                     onClose();
+                    clearAuthSession();
                     router.push("/login");
                   }}
                 >

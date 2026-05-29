@@ -1,5 +1,7 @@
-import { UpdatesPage } from "@/components/dashboard/updates-page";
+import { redirect } from "next/navigation";
+import { ROUTES } from "@/constants/routes";
 
-export default function UpdateRoute() {
-  return <UpdatesPage />;
+/** Legacy path from earlier routing; canonical route is `ROUTES.hospital.update`. */
+export default function UpdateLegacyRedirect() {
+  redirect(ROUTES.hospital.update);
 }

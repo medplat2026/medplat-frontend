@@ -10,13 +10,14 @@ import { PasswordField } from "@/components/ui/password-field";
 import { PasswordStrengthMeter } from "@/components/ui/password-strength-meter";
 import { ROUTES } from "@/constants/routes";
 import { PATIENT_ONBOARDING_STORAGE } from "@/constants/onboarding";
+import { registerPatient } from "@/services/auth.service";
+import type { APIError } from "@/types/api";
 import { CircleStepper } from "@/components/onboarding/circle-stepper";
 import { OnboardingHeading } from "@/components/onboarding/onboarding-heading";
 import { OnboardingHeroImage } from "@/components/onboarding/onboarding-hero-image";
 import { OnboardingScaffold } from "@/components/onboarding/onboarding-scaffold";
 import { OrDivider } from "@/components/onboarding/or-divider";
 import { SocialLoginButtons } from "@/components/onboarding/social-login-buttons";
-import { axiosInstance } from "@/lib/axios";
 import { cn } from "@/lib/utils";
 
 type PatientRegistrationDraft = {
@@ -55,6 +56,16 @@ export function PatientPasswordStep() {
       if (!parsedDraft.first_name || !parsedDraft.last_name || !parsedDraft.email || !parsedDraft.phone_number) {
         throw new Error("Invalid registration draft");
       }
+
+      const uidRaw = window.sessionStorage.getItem(PATIENT_ONBOARDING_STORAGE.registerPatientUid);
+      if (!uidRaw || !/^\d+$/.test(uidRaw)) {
+        toast.error("Please verify your email again to continue.");
+        router.replace(
+          `${ROUTES.onboarding.patient.verify}?email=${encodeURIComponent(parsedDraft.email.trim())}`,
+        );
+        return;
+      }
+
       setRegistrationDraft(parsedDraft);
     } catch {
       window.sessionStorage.removeItem(PATIENT_ONBOARDING_STORAGE.registrationDraft);
@@ -67,41 +78,51 @@ export function PatientPasswordStep() {
     return password.length >= 8 && /[A-Z]/.test(password) && /[0-9]/.test(password);
   }, [password]);
 
-  const canSubmit = Boolean(registrationDraft) && passwordRulesMet && password === confirmPassword && !isSubmitting;
+  const formValid =
+    Boolean(registrationDraft) && passwordRulesMet && password === confirmPassword;
+  const canSubmit = formValid && !isSubmitting;
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canSubmit) {
+    if (!formValid || !registrationDraft) {
       toast.error("Please meet password requirements and ensure both fields match.");
       return;
     }
+    if (isSubmitting) return;
 
-    if (!registrationDraft) {
-      toast.error("Please complete your basic details first.");
-      router.replace(ROUTES.onboarding.patient.details);
-      return;
-    }
-
-    if (typeof window !== "undefined" && window.sessionStorage.getItem(PATIENT_ONBOARDING_STORAGE.emailVerified) !== "true") {
-      toast.error("Please verify your email before continuing.");
-      router.replace(ROUTES.onboarding.patient.email);
+    if (typeof window === "undefined") return;
+    const uidRaw = window.sessionStorage.getItem(PATIENT_ONBOARDING_STORAGE.registerPatientUid);
+    const uid = uidRaw ? Number.parseInt(uidRaw, 10) : Number.NaN;
+    if (!Number.isFinite(uid)) {
+      toast.error("Please verify your email again to continue.");
+      router.replace(
+        `${ROUTES.onboarding.patient.verify}?email=${encodeURIComponent(registrationDraft.email.trim())}`,
+      );
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await axiosInstance.post("/auth/auth/register/", {
-        ...registrationDraft,
+      const data = await registerPatient({
+        uid,
+        first_name: registrationDraft.first_name,
+        last_name: registrationDraft.last_name,
+        phone_number: registrationDraft.phone_number,
         password,
         password_confirm: confirmPassword,
       });
       window.sessionStorage.removeItem(PATIENT_ONBOARDING_STORAGE.emailVerified);
       window.sessionStorage.removeItem(PATIENT_ONBOARDING_STORAGE.verifiedEmail);
+      window.sessionStorage.removeItem(PATIENT_ONBOARDING_STORAGE.verifyEmailUid);
+      window.sessionStorage.removeItem(PATIENT_ONBOARDING_STORAGE.registerPatientUid);
       window.sessionStorage.removeItem(PATIENT_ONBOARDING_STORAGE.registrationDraft);
-      toast.success("Patient account created successfully.");
+      const successMessage =
+        typeof data.message === "string" ? data.message : "Patient account created successfully.";
+      toast.success(successMessage);
       router.push(ROUTES.login);
-    } catch {
-      toast.error("Unable to create your account right now. Please try again.");
+    } catch (error) {
+      const { message } = error as APIError;
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -109,9 +130,7 @@ export function PatientPasswordStep() {
 
   return (
     <OnboardingScaffold
-      hero={
-        <OnboardingHeroImage alt="Secure your patient account" carouselActiveIndex={2} />
-      }
+      hero={<OnboardingHeroImage alt="Secure your patient account" carouselActiveIndex={2} />}
       beforeTitle={<CircleStepper totalSteps={2} currentStep={1} />}
     >
       <div className="flex min-h-0 w-full flex-1 flex-col justify-center gap-8">
@@ -152,11 +171,11 @@ export function PatientPasswordStep() {
           <Button
             type="submit"
             fullWidth
-            variant={canSubmit ? "brand" : "subtle"}
+            variant={formValid ? "brand" : "subtle"}
             disabled={!canSubmit}
-            className={cn("py-3 text-xs", !canSubmit && "bg-[#F8FAFC]")}
+            className={cn("py-3 text-xs", !formValid && "bg-[#F8FAFC]")}
           >
-            {isSubmitting ? "Creating account..." : "Create account"}
+            {isSubmitting ? "Creating account…" : "Create account"}
           </Button>
         </form>
         <OrDivider />

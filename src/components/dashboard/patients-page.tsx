@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { CreateCaseModal } from "@/components/dashboard/create-case-modal";
 import { CreatePatientModal } from "@/components/dashboard/create-patient-modal";
 import { ROUTES } from "@/constants/routes";
 import { MOCK_PATIENTS } from "@/data/mock-patients";
@@ -38,15 +39,27 @@ function EyeIcon({ className }: { className?: string }) {
 }
 
 function PatientActions({ patient }: { patient: PatientRecord }) {
+  const numericId = Number.parseInt(patient.id, 10);
+  const serverPatientId =
+    Number.isFinite(numericId) && numericId > 0 ? numericId : undefined;
+
   return (
-    <Link
-      href={ROUTES.patientDetail(patient.id)}
-      aria-label={`View ${patient.name}`}
-      className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground transition-colors hover:text-onboarding-blue"
-    >
-      <EyeIcon className="text-muted-foreground" />
-      View
-    </Link>
+    <div className="flex flex-nowrap items-center justify-end gap-2 sm:gap-3">
+      <Link
+        href={ROUTES.hospital.patientDetail(patient.id)}
+        aria-label={`View ${patient.name}`}
+        className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs font-medium text-foreground transition-colors hover:text-onboarding-blue"
+      >
+        <EyeIcon className="text-muted-foreground" />
+        View
+      </Link>
+      <CreateCaseModal
+        patientId={serverPatientId}
+        triggerLabel="Create case"
+        triggerVariant="outline"
+        triggerClassName="h-auto shrink-0 whitespace-nowrap rounded-lg border-input-border px-2.5 py-1 text-xs font-medium text-foreground hover:text-onboarding-blue"
+      />
+    </div>
   );
 }
 
@@ -95,6 +108,7 @@ const patientColumns: DataTableColumn<PatientRecord>[] = [
   {
     id: "actions",
     header: "Actions",
+    cellClassName: "min-w-[10.5rem]",
     cell: (row) => <PatientActions patient={row} />,
   },
 ];

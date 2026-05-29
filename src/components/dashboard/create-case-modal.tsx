@@ -1,6 +1,8 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useId, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   allDocumentsUploaded,
   createEmptyDocumentUploads,
@@ -12,7 +14,19 @@ import { AppModal } from "@/components/ui/app-modal";
 import { Button, type ButtonVariant } from "@/components/ui/Button";
 import { ModalFormField } from "@/components/ui/modal-form-field";
 import { SuccessConfirmModal } from "@/components/ui/success-confirm-modal";
+import {
+  CREATE_PATIENT_DOCUMENT_ERROR_KEY,
+  firstFieldErrorMessage,
+  validateCreatePatientStep2Draft,
+  validateCreatePatientStep2Submit,
+} from "@/lib/create-patient-validation";
 import { cn } from "@/lib/utils";
+import {
+  buildHospitalCreatePatientStep2FormData,
+  hospitalDashboardQueryKey,
+  hospitalService,
+} from "@/services/hospital.service";
+import type { APIError } from "@/types/api";
 
 const yesNoOptions = [
   { value: "yes", label: "Yes" },
@@ -26,18 +40,25 @@ const urgencyOptions = [
   { value: "critical", label: "Critical" },
 ];
 
-const treatmentStartOptions = [
-  { value: "0", label: "0 days" },
-  { value: "7", label: "7 days" },
-  { value: "14", label: "14 days" },
-  { value: "30", label: "30 days" },
-  { value: "60", label: "60 days" },
+const visibilityOptions = [
+  { value: "public", label: "Public" },
+  { value: "private", label: "Private" },
+];
+
+const contactOptions = [
+  { value: "phone", label: "Phone" },
+  { value: "email", label: "Email" },
+  { value: "whatsapp", label: "WhatsApp" },
 ];
 
 const REQUIRED_CASE_DOCUMENTS = [
-  { id: "doctors_report", label: "Doctor's report", fieldName: "documentDoctorsReport" },
-  { id: "cost_estimate", label: "Cost estimate/ invoice", fieldName: "documentCostEstimate" },
-  { id: "admission_letter", label: "Admission letter", fieldName: "documentAdmissionLetter" },
+  { id: "doctors_report", label: "Doctor's report", fieldName: "doctors_report" },
+  {
+    id: "hospital_bill_estimate",
+    label: "Hospital bill / estimate",
+    fieldName: "hospital_bill_estimate",
+  },
+  { id: "valid_id_card", label: "Valid ID card", fieldName: "valid_id_card" },
 ] as const;
 
 type CaseDocumentId = (typeof REQUIRED_CASE_DOCUMENTS)[number]["id"];
@@ -46,18 +67,33 @@ type CaseDocumentsMap = DocumentUploadsMap<CaseDocumentId>;
 
 const EMPTY_CASE_DOCUMENTS = createEmptyDocumentUploads(REQUIRED_CASE_DOCUMENTS);
 
-type CreateCaseModalProps = {
+export type CreateCaseModalProps = {
   triggerClassName?: string;
   triggerVariant?: ButtonVariant;
+  /** Button label; default "+ Create Case" */
+  triggerLabel?: string;
+  /** Existing patient id for `PATCH /hospitals/create-patient/medical-case/`. */
+  patientId?: number;
 };
 
-export function CreateCaseModal({ triggerClassName, triggerVariant = "outline" }: CreateCaseModalProps) {
+export function CreateCaseModal({
+  triggerClassName,
+  triggerVariant = "outline",
+  triggerLabel = "+ Create Case",
+  patientId,
+}: CreateCaseModalProps) {
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [successOpen, setSuccessOpen] = useState(false);
   const [caseDocuments, setCaseDocuments] = useState<CaseDocumentsMap>(EMPTY_CASE_DOCUMENTS);
   const [documentsValidationError, setDocumentsValidationError] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const formRef = useRef<HTMLFormElement>(null);
   const formId = useId();
   const fileInputId = `${formId}-case-docs`;
+
+  const patientIdValid = patientId != null && Number.isFinite(patientId) && patientId > 0;
 
   function resetDocuments() {
     setCaseDocuments(EMPTY_CASE_DOCUMENTS);
@@ -66,22 +102,83 @@ export function CreateCaseModal({ triggerClassName, triggerVariant = "outline" }
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
-    if (!next) resetDocuments();
+    if (!next) {
+      resetDocuments();
+      setFieldErrors({});
+      setIsSubmitting(false);
+    }
+  }
+
+  async function submitCase(submitCase: boolean) {
+    const form = formRef.current;
+    if (!patientIdValid || !form) {
+      toast.error("Patient ID is missing. Open Create Case from a patient profile.");
+      return;
+    }
+
+    const formData = new FormData(form);
+    const documentsComplete = allDocumentsUploaded(REQUIRED_CASE_DOCUMENTS, caseDocuments);
+    const errors = submitCase
+      ? validateCreatePatientStep2Submit(formData, documentsComplete)
+      : validateCreatePatientStep2Draft(formData);
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setDocumentsValidationError(Boolean(errors[CREATE_PATIENT_DOCUMENT_ERROR_KEY]));
+      const msg = firstFieldErrorMessage(errors);
+      if (msg) toast.error(msg);
+      return;
+    }
+    setFieldErrors({});
+    setDocumentsValidationError(false);
+
+    setIsSubmitting(true);
+    try {
+      const multipartBody = buildHospitalCreatePatientStep2FormData(
+        formData,
+        patientId,
+        null,
+        submitCase,
+        {
+          doctors_report: caseDocuments.doctors_report,
+          hospital_bill_estimate: caseDocuments.hospital_bill_estimate,
+          valid_id_card: caseDocuments.valid_id_card,
+        },
+        submitCase,
+      );
+      await hospitalService.patchCreatePatientMedicalCase(multipartBody);
+      await queryClient.invalidateQueries({ queryKey: hospitalDashboardQueryKey });
+
+      if (submitCase) {
+        setOpen(false);
+        resetDocuments();
+        setSuccessOpen(true);
+      } else {
+        toast.success("Draft saved.");
+      }
+    } catch (error) {
+      const { message } = error as APIError;
+      toast.error(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
     <>
-      <Button
-        type="button"
-        variant={triggerVariant}
-        className={cn(
-          triggerVariant === "outline" && "rounded-xl border-onboarding-blue px-5 text-onboarding-blue",
-          triggerClassName,
-        )}
-        onClick={() => setOpen(true)}
-      >
-        + Create Case
-      </Button>
+      <span className="inline-flex shrink-0">
+        <Button
+          type="button"
+          variant={triggerVariant}
+          className={cn(
+            triggerVariant === "outline" && "rounded-xl border-onboarding-blue px-5 text-onboarding-blue",
+            triggerClassName,
+          )}
+          onClick={() => setOpen(true)}
+        >
+          {triggerLabel}
+        </Button>
+      </span>
 
       <AppModal
         open={open}
@@ -93,96 +190,126 @@ export function CreateCaseModal({ triggerClassName, triggerVariant = "outline" }
           <div className="space-y-4">
             <CaseSubmitConfirmationBanner />
             <div className="flex flex-wrap justify-end gap-3">
-              <Button type="button" variant="outline" className="rounded-xl border-input-border px-5">
-                Save as draft
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl border-input-border px-5"
+                disabled={isSubmitting || !patientIdValid}
+                onClick={() => void submitCase(false)}
+              >
+                {isSubmitting ? "Saving…" : "Save as draft"}
               </Button>
-              <Button type="submit" form={formId} className="rounded-xl px-6">
-                Submit Case
+              <Button
+                type="button"
+                className="rounded-xl px-6"
+                disabled={isSubmitting || !patientIdValid}
+                onClick={() => void submitCase(true)}
+              >
+                {isSubmitting ? "Submitting…" : "Submit Case"}
               </Button>
             </div>
           </div>
         }
       >
         <form
+          ref={formRef}
           id={formId}
           className="space-y-5"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!allDocumentsUploaded(REQUIRED_CASE_DOCUMENTS, caseDocuments)) {
-              setDocumentsValidationError(true);
-              return;
-            }
-            setDocumentsValidationError(false);
-            const fd = new FormData(e.currentTarget);
-            for (const doc of REQUIRED_CASE_DOCUMENTS) {
-              const file = caseDocuments[doc.id];
-              if (file) fd.append(doc.fieldName, file);
-            }
-            setOpen(false);
-            resetDocuments();
-            setSuccessOpen(true);
           }}
         >
-          <ModalFormField
-            control="textarea"
-            id={`${formId}-diagnosis`}
-            name="diagnosisTreatmentPlan"
-            label="Diagnosis and Treatment Plan"
-            placeholder="Provide detailed diagnosis and treatment required..."
-            rows={4}
-          />
+          {!patientIdValid ? (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              A patient must be selected. Use <strong>Create Case</strong> from a patient’s profile so their
+              server ID can be sent with the request.
+            </p>
+          ) : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <ModalFormField
               control="select"
               id={`${formId}-urgency`}
-              name="urgencyLevel"
+              name="urgency_level"
               label="Urgency level"
               placeholder="Select urgency level"
               defaultValue=""
               options={urgencyOptions}
+              requiredIndicator
+              error={fieldErrors.urgency_level}
             />
             <ModalFormField
-              control="select"
-              id={`${formId}-treatment-start`}
-              name="expectedTreatmentStart"
-              label="Expected treatment start date"
-              placeholder="0 days"
-              defaultValue=""
-              requiredIndicator
-              options={treatmentStartOptions}
+              control="input"
+              id={`${formId}-expected-start`}
+              name="expected_start_date"
+              type="date"
+              label="Expected start date"
             />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <ModalFormField
               control="input"
-              id={`${formId}-total-cost`}
-              name="totalEstimatedCost"
-              label="Total Estimated Cost"
-              placeholder="# 0.00"
+              id={`${formId}-estimated-cost`}
+              name="estimated_cost"
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="0.01"
+              label="Estimated treatment cost"
+              placeholder="0.00"
+              requiredIndicator
+              error={fieldErrors.estimated_cost}
             />
             <ModalFormField
               control="input"
               id={`${formId}-amount-paid`}
-              name="amountAlreadyPaid"
+              name="amount_already_paid"
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="0.01"
               label="Amount already paid"
-              placeholder="# 0.00"
-            />
-            <ModalFormField
-              control="input"
-              id={`${formId}-amount-needed`}
-              name="amountNeeded"
-              label="Amount Needed"
-              placeholder="# 0.00"
+              placeholder="0"
+              defaultValue="0"
+              error={fieldErrors.amount_already_paid}
             />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <ModalFormField
+              control="select"
+              id={`${formId}-visibility`}
+              name="visibility"
+              label="Case visibility"
+              defaultValue="public"
+              options={visibilityOptions}
+            />
+            <ModalFormField
+              control="select"
+              id={`${formId}-fundraising-approved`}
+              name="patient_approved_fundraising"
+              label="Patient/family approved fundraising?"
+              defaultValue="no"
+              options={yesNoOptions}
+            />
+          </div>
+
+          <ModalFormField
+            control="select"
+            id={`${formId}-contact-method`}
+            name="preferred_contact_method"
+            label="Preferred contact method"
+            defaultValue="phone"
+            options={contactOptions}
+            error={fieldErrors.preferred_contact_method}
+          />
+
+          <div className="grid gap-4 sm:grid-cols-2">
             <ModalFormField
               control="input"
               id={`${formId}-family-name`}
-              name="familyContactName"
+              name="family_contact_name"
               label="Family contact name"
               placeholder="Enter name"
               autoComplete="name"
@@ -190,35 +317,26 @@ export function CreateCaseModal({ triggerClassName, triggerVariant = "outline" }
             <ModalFormField
               control="input"
               id={`${formId}-family-phone`}
-              name="familyContactPhone"
+              name="family_contact_phone"
               type="tel"
-              label="Family contact no."
+              label="Family contact phone"
               placeholder="(+234)-5433-3472-7365"
               autoComplete="tel"
-            />
-            <ModalFormField
-              control="select"
-              id={`${formId}-fundraising-approved`}
-              name="fundraisingApproved"
-              label="Patient/family approved fundraising?"
-              placeholder="Yes/No"
-              defaultValue=""
-              options={yesNoOptions}
             />
           </div>
 
           <ModalFormField
             control="textarea"
             id={`${formId}-patient-story`}
-            name="patientStory"
-            label="Patient Story"
-            placeholder="Briefly describe patient story (250 words max)..."
+            name="patient_story"
+            label="Patient story"
+            placeholder="Briefly describe the patient's story…"
             rows={5}
           />
 
           <details className="group rounded-xl border border-input-border bg-white open:shadow-sm">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
-              <span>Select documents</span>
+              <span>Upload documents</span>
               <span className="text-muted-foreground transition-transform group-open:rotate-180" aria-hidden>
                 <DocumentsDetailsChevron />
               </span>
@@ -233,10 +351,18 @@ export function CreateCaseModal({ triggerClassName, triggerVariant = "outline" }
                   if (allDocumentsUploaded(REQUIRED_CASE_DOCUMENTS, next)) {
                     setDocumentsValidationError(false);
                   }
+                  setFieldErrors((prev) => {
+                    if (!prev[CREATE_PATIENT_DOCUMENT_ERROR_KEY]) return prev;
+                    const { [CREATE_PATIENT_DOCUMENT_ERROR_KEY]: _, ...rest } = prev;
+                    return rest;
+                  });
                 }}
                 showError={documentsValidationError}
                 completeMessage="You can submit the case."
               />
+              {fieldErrors[CREATE_PATIENT_DOCUMENT_ERROR_KEY] ? (
+                <p className="mt-2 text-xs text-destructive">{fieldErrors[CREATE_PATIENT_DOCUMENT_ERROR_KEY]}</p>
+              ) : null}
             </div>
           </details>
         </form>

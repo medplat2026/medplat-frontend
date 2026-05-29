@@ -49,8 +49,8 @@ export function CaseCard({ caseRecord }: CaseCardProps) {
 
       <div className="mt-6 flex justify-end">
         <Link
-          href={ROUTES.patientDetail(caseRecord.patientId)}
-          className="inline-flex min-w-[9.5rem] items-center justify-center rounded-lg bg-onboarding-blue px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-onboarding-blue-hover"
+          href={ROUTES.hospital.patientDetail(caseRecord.patientId)}
+          className="inline-flex min-w-38 items-center justify-center rounded-lg bg-onboarding-blue px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-onboarding-blue-hover"
         >
           View details
         </Link>

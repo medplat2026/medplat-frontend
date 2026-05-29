@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { ROUTES } from "@/constants/routes";
-import { PATIENT_ONBOARDING_STORAGE } from "@/constants/onboarding";
+import { ONBOARDING_OTP_DIGITS, PATIENT_ONBOARDING_STORAGE } from "@/constants/onboarding";
 import { OtpInputGroup } from "@/components/onboarding/otp-input-group";
 import { OnboardingHeading } from "@/components/onboarding/onboarding-heading";
 import { OnboardingHeroImage } from "@/components/onboarding/onboarding-hero-image";
@@ -14,46 +14,97 @@ import { OnboardingScaffold } from "@/components/onboarding/onboarding-scaffold"
 import { OrDivider } from "@/components/onboarding/or-divider";
 import { SocialLoginButtons } from "@/components/onboarding/social-login-buttons";
 import { isValidEmail } from "@/lib/contact-validation";
-
-const OTP_LENGTH = 5;
+import { authService } from "@/services/auth.service";
+import type { APIError } from "@/types/api";
 
 export function PatientVerifyStep() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = useMemo(() => (searchParams.get("email") ?? "").trim(), [searchParams]);
   const [otp, setOtp] = useState("");
+  const [isResending, setIsResending] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   useEffect(() => {
     if (!email || !isValidEmail(email)) {
       toast.error("Please start registration with a valid email.");
       router.replace(ROUTES.onboarding.patient.email);
+      return;
+    }
+    if (typeof window === "undefined") return;
+    const uidStored = window.sessionStorage.getItem(PATIENT_ONBOARDING_STORAGE.verifyEmailUid);
+    if (!uidStored || !/^\d+$/.test(uidStored)) {
+      toast.error("Please request a verification code first.");
+      router.replace(ROUTES.onboarding.patient.email);
     }
   }, [email, router]);
 
-  const canSubmit = otp.replace(/\D/g, "").length === OTP_LENGTH;
+  const otpDigits = otp.replace(/\D/g, "");
+  const otpComplete = otpDigits.length === ONBOARDING_OTP_DIGITS;
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!email || !isValidEmail(email)) {
       router.replace(ROUTES.onboarding.patient.email);
       return;
     }
-    if (!canSubmit) {
-      toast.error(`Please enter the ${OTP_LENGTH}-digit code from your email.`);
+    const token = otpDigits;
+    if (token.length !== ONBOARDING_OTP_DIGITS) {
+      toast.error(`Please enter the ${ONBOARDING_OTP_DIGITS}-digit code from your email.`);
       return;
     }
 
-    if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(PATIENT_ONBOARDING_STORAGE.emailVerified, "true");
-      window.sessionStorage.setItem(PATIENT_ONBOARDING_STORAGE.verifiedEmail, email.toLowerCase());
+    if (typeof window === "undefined") return;
+    const uidRaw = window.sessionStorage.getItem(PATIENT_ONBOARDING_STORAGE.verifyEmailUid);
+    const uid = uidRaw ? Number.parseInt(uidRaw, 10) : Number.NaN;
+    if (!Number.isFinite(uid)) {
+      toast.error("Please request a verification code first.");
+      router.replace(ROUTES.onboarding.patient.email);
+      return;
     }
 
-    toast.success("Email verified. Continue with your details.");
-    router.push(`${ROUTES.onboarding.patient.details}?email=${encodeURIComponent(email)}`);
+    if (isVerifying) return;
+    setIsVerifying(true);
+    try {
+      const data = await authService.verifyEmail({ uid, token });
+      const successMessage =
+        typeof data.message === "string"
+          ? data.message
+          : "Email verified. Continue with your details.";
+      let registerUid = uid;
+      const maybeUid = data.uid;
+      if (typeof maybeUid === "number" && Number.isFinite(maybeUid)) {
+        registerUid = maybeUid;
+      } else if (typeof maybeUid === "string" && /^\d+$/.test(maybeUid)) {
+        registerUid = Number.parseInt(maybeUid, 10);
+      }
+      window.sessionStorage.setItem(PATIENT_ONBOARDING_STORAGE.registerPatientUid, String(registerUid));
+      window.sessionStorage.removeItem(PATIENT_ONBOARDING_STORAGE.verifyEmailUid);
+      window.sessionStorage.setItem(PATIENT_ONBOARDING_STORAGE.emailVerified, "true");
+      window.sessionStorage.setItem(PATIENT_ONBOARDING_STORAGE.verifiedEmail, email.toLowerCase());
+      toast.success(successMessage);
+      router.push(`${ROUTES.onboarding.patient.details}?email=${encodeURIComponent(email)}`);
+    } catch (error) {
+      const { message } = error as APIError;
+      toast.error(message);
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
-  const handleResend = () => {
-    toast.message("Verification code resent (demo). Check your inbox.");
+  const handleResend = async () => {
+    if (!email || !isValidEmail(email)) return;
+    setIsResending(true);
+    try {
+      const { uid, message } = await authService.patientInitiateEmail({ email });
+      window.sessionStorage.setItem(PATIENT_ONBOARDING_STORAGE.verifyEmailUid, String(uid));
+      toast.success(message ?? "Verification code resent. Check your inbox.");
+    } catch (error) {
+      const { message } = error as APIError;
+      toast.error(message);
+    } finally {
+      setIsResending(false);
+    }
   };
 
   if (!email || !isValidEmail(email)) {
@@ -67,21 +118,22 @@ export function PatientVerifyStep() {
       <div className="flex min-h-0 w-full flex-1 flex-col justify-center gap-8">
         <OnboardingHeading
           title="Verify your email"
-          subtitle={`We sent a ${OTP_LENGTH}-digit code to ${email}. Enter it below to continue.`}
+          subtitle={`We sent a ${ONBOARDING_OTP_DIGITS}-digit code to ${email}. Enter it below to continue.`}
         />
         <form className="space-y-6" onSubmit={handleSubmit} noValidate>
           <OtpInputGroup value={otp} onChange={setOtp} />
-          <Button type="submit" fullWidth disabled={!canSubmit}>
-            Verify and continue
+          <Button type="submit" fullWidth disabled={!otpComplete || isVerifying}>
+            {isVerifying ? "Verifying…" : "Verify and continue"}
           </Button>
           <p className="text-center text-sm text-muted-foreground">
             Didn&apos;t get a code?{" "}
             <button
               type="button"
-              className="font-semibold text-onboarding-blue underline-offset-4 hover:underline"
+              className="font-semibold text-onboarding-blue underline-offset-4 hover:underline disabled:opacity-50"
               onClick={handleResend}
+              disabled={isResending || isVerifying}
             >
-              Resend code
+              {isResending ? "Sending…" : "Resend code"}
             </button>
           </p>
         </form>

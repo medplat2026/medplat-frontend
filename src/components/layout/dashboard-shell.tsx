@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { DashboardSidebar } from "@/components/layout/dashboard-sidebar";
+import { getStoredAuthUser } from "@/lib/auth-session";
 import { cn } from "@/lib/utils";
 
 type DashboardShellProps = {
@@ -11,12 +12,27 @@ type DashboardShellProps = {
   hospitalName?: string;
 };
 
-export function DashboardShell({
-  children,
-  hospitalName = "LUTH Hospital",
-}: DashboardShellProps) {
+export function DashboardShell({ children, hospitalName: hospitalNameProp }: DashboardShellProps) {
+  const [hospitalName, setHospitalName] = useState(() => {
+    if (hospitalNameProp != null && hospitalNameProp !== "") return hospitalNameProp;
+    if (typeof window === "undefined") return "LUTH Hospital";
+    const u = getStoredAuthUser();
+    if (u?.full_name?.trim()) return u.full_name.trim();
+    if (u?.email) return u.email;
+    return "LUTH Hospital";
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (hospitalNameProp != null && hospitalNameProp !== "") {
+      setHospitalName(hospitalNameProp);
+      return;
+    }
+    const u = getStoredAuthUser();
+    if (u?.full_name?.trim()) setHospitalName(u.full_name.trim());
+    else if (u?.email) setHospitalName(u.email);
+  }, [hospitalNameProp]);
 
   useEffect(() => {
     const closeOnDesktop = () => {

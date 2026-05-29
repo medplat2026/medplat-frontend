@@ -13,11 +13,10 @@ import { OnboardingScaffold } from "@/components/onboarding/onboarding-scaffold"
 import { OrDivider } from "@/components/onboarding/or-divider";
 import { SocialLoginButtons } from "@/components/onboarding/social-login-buttons";
 import { ROUTES } from "@/constants/routes";
-
-/** Replace with API; until then use `demo@medplat.com` / `DemoPass1!` to sign in. */
-function demoSignInOk(email: string, password: string): boolean {
-  return email.trim().toLowerCase() === "demo@medplat.com" && password === "DemoPass1!";
-}
+import { clearAuthSession, inferPortalFromLoginData, persistLoginSession } from "@/lib/auth-session";
+import { syncHospitalProfileFlagsFromLoginUser } from "@/lib/hospital-profile-storage";
+import { authService } from "@/services/auth.service";
+import type { APIError } from "@/types/api";
 
 export function LoginPage() {
   const router = useRouter();
@@ -32,23 +31,54 @@ export function LoginPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     clearAuthError();
-    if (!email.trim()) {
+    const form = event.currentTarget;
+    const fd = new FormData(form);
+    /** Prefer FormData so password-manager autofill still submits even if React state missed `onChange`. */
+    const emailTrimmed = String(fd.get("email") ?? "").trim() || email.trim();
+    const passwordUsed = String(fd.get("password") ?? "") || password;
+
+    if (!emailTrimmed) {
       toast.error("Please enter your email.");
       return;
     }
-    if (!password) {
+    if (!passwordUsed) {
       toast.error("Please enter your password.");
       return;
     }
+    if (emailTrimmed !== email) setEmail(emailTrimmed);
+    if (passwordUsed !== password) setPassword(passwordUsed);
+
     setPending(true);
     try {
-      await new Promise((r) => setTimeout(r, 450));
-      if (demoSignInOk(email, password)) {
-        toast.success("Signed in successfully.");
-        router.push(ROUTES.dashboard);
-        return;
+      /** Drop stale JWTs so login is not rejected (Bearer on `/auth/login/` → token_not_valid). */
+      clearAuthSession();
+      const data = await authService.login({ email: emailTrimmed, password: passwordUsed });
+      persistLoginSession(data);
+      syncHospitalProfileFlagsFromLoginUser(data.user);
+      const portal = inferPortalFromLoginData(data as Record<string, unknown>);
+      if (data.must_change_password) {
+        toast.info("Password update required", {
+          description: "Change your password in account settings when you can.",
+        });
       }
-      setAuthError("Invalid email or password. Please try again.");
+      toast.success("Signed in successfully.", {
+        description:
+          portal == null ? "Choose hospital or patient to continue." : undefined,
+      });
+      if (portal === "patient") {
+        router.push(ROUTES.patient.dashboard);
+      } else if (portal === "hospital") {
+        router.push(ROUTES.hospital.dashboard);
+      } else {
+        router.push(ROUTES.home);
+      }
+    } catch (error) {
+      const raw = error as Partial<APIError>;
+      const message =
+        typeof raw.message === "string" && raw.message.trim()
+          ? raw.message.trim()
+          : "Sign-in failed. Please try again.";
+      setAuthError(message);
     } finally {
       setPending(false);
     }
@@ -69,6 +99,7 @@ export function LoginPage() {
           <div className="space-y-4">
             <InputField
               id="login-email"
+              name="email"
               label="Email"
               type="email"
               autoComplete="email"
@@ -81,6 +112,7 @@ export function LoginPage() {
             />
             <PasswordField
               id="login-password"
+              name="password"
               label="Password"
               autoComplete="current-password"
               value={password}

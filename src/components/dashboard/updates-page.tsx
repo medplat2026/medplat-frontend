@@ -49,7 +49,7 @@ export function UpdatesPage() {
       <DataTableToolbar
         className="pb-0"
         primaryAction={
-          <Button type="button" className="rounded-lg px-8 py-2">
+          <Button type="button" className="rounded-lg px-4 py-2.5">
             <PlusIcon />
             Add Update
           </Button>
@@ -72,7 +72,7 @@ export function UpdatesPage() {
           ) : (
             <ol className="relative space-y-6">
               <div
-                className="absolute left-3 top-[7px] bottom-2 w-px -translate-x-1/2 bg-[#007BFFB2]"
+                className="absolute left-3 top-[7px] bottom-2 w-px -translate-x-1/2 bg-onboarding-blue"
                 aria-hidden
               />
               {paginatedUpdates.map((update, index) => (
@@ -84,7 +84,7 @@ export function UpdatesPage() {
                     )}
                   >
                     <span
-                      className="size-3.5 shrink-0 rounded-full bg-[#007bff] ring-4 ring-white"
+                      className="size-3.5 shrink-0 rounded-full bg-onboarding-blue ring-4 ring-white"
                       aria-hidden
                     />
                   </div>
@@ -101,4 +101,3 @@ export function UpdatesPage() {
     </div>
   );
 }
-

@@ -11,6 +11,8 @@ import { PasswordStrengthMeter } from "@/components/ui/password-strength-meter";
 import { ROUTES } from "@/constants/routes";
 import { HOSPITAL_ONBOARDING_STORAGE } from "@/constants/onboarding";
 import { markHospitalProfileNeedsCompletion } from "@/lib/hospital-profile-storage";
+import { authService } from "@/services/auth.service";
+import type { APIError } from "@/types/api";
 import { CircleStepper } from "@/components/onboarding/circle-stepper";
 import { OnboardingHeading } from "@/components/onboarding/onboarding-heading";
 import { OnboardingHeroImage } from "@/components/onboarding/onboarding-hero-image";
@@ -30,6 +32,7 @@ export function HospitalPasswordStep() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [registrationDraft, setRegistrationDraft] = useState<HospitalRegistrationDraft | null>(null);
 
   useEffect(() => {
@@ -53,6 +56,16 @@ export function HospitalPasswordStep() {
       if (!parsed.hospital_name?.trim() || !parsed.email?.trim() || !parsed.phone_number?.trim()) {
         throw new Error("Invalid draft");
       }
+
+      const uidRaw = window.sessionStorage.getItem(HOSPITAL_ONBOARDING_STORAGE.registerHospitalUid);
+      if (!uidRaw || !/^\d+$/.test(uidRaw)) {
+        toast.error("Please verify your email again to continue.");
+        router.replace(
+          `${ROUTES.onboarding.hospital.verify}?email=${encodeURIComponent(parsed.email.trim())}`,
+        );
+        return;
+      }
+
       setRegistrationDraft(parsed);
     } catch {
       window.sessionStorage.removeItem(HOSPITAL_ONBOARDING_STORAGE.registrationDraft);
@@ -65,24 +78,55 @@ export function HospitalPasswordStep() {
     return password.length >= 8 && /[A-Z]/.test(password) && /[0-9]/.test(password);
   }, [password]);
 
-  const canSubmit = Boolean(registrationDraft) && passwordRulesMet && password === confirmPassword;
+  const formValid =
+    Boolean(registrationDraft) && passwordRulesMet && password === confirmPassword;
+  const canSubmit = formValid && !isSubmitting;
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canSubmit || !registrationDraft) {
+    if (!formValid || !registrationDraft) {
       toast.error("Please meet password requirements and ensure both fields match.");
       return;
     }
+    if (isSubmitting) return;
 
-    if (typeof window !== "undefined") {
-      window.sessionStorage.removeItem(HOSPITAL_ONBOARDING_STORAGE.emailVerified);
-      window.sessionStorage.removeItem(HOSPITAL_ONBOARDING_STORAGE.verifiedEmail);
-      window.sessionStorage.removeItem(HOSPITAL_ONBOARDING_STORAGE.registrationDraft);
+    if (typeof window === "undefined") return;
+    const uidRaw = window.sessionStorage.getItem(HOSPITAL_ONBOARDING_STORAGE.registerHospitalUid);
+    const uid = uidRaw ? Number.parseInt(uidRaw, 10) : Number.NaN;
+    if (!Number.isFinite(uid)) {
+      toast.error("Please verify your email again to continue.");
+      router.replace(
+        `${ROUTES.onboarding.hospital.verify}?email=${encodeURIComponent(registrationDraft.email.trim())}`,
+      );
+      return;
     }
 
-    markHospitalProfileNeedsCompletion();
-    toast.success("Hospital account created (demo).");
-    router.push(ROUTES.dashboard);
+    setIsSubmitting(true);
+    try {
+      const data = await authService.registerHospital({
+        uid,
+        hospital_name: registrationDraft.hospital_name,
+        phone_number: registrationDraft.phone_number,
+        password,
+        password_confirm: confirmPassword,
+      });
+      window.sessionStorage.removeItem(HOSPITAL_ONBOARDING_STORAGE.emailVerified);
+      window.sessionStorage.removeItem(HOSPITAL_ONBOARDING_STORAGE.verifiedEmail);
+      window.sessionStorage.removeItem(HOSPITAL_ONBOARDING_STORAGE.registerHospitalUid);
+      window.sessionStorage.removeItem(HOSPITAL_ONBOARDING_STORAGE.registrationDraft);
+      const baseMessage =
+        typeof data.message === "string" && data.message.trim()
+          ? data.message.trim()
+          : "Hospital account created successfully.";
+      toast.success(`${baseMessage} Please sign in to continue.`);
+      markHospitalProfileNeedsCompletion();
+      router.replace(ROUTES.login);
+    } catch (error) {
+      const { message } = error as APIError;
+      toast.error(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -131,7 +175,7 @@ export function HospitalPasswordStep() {
             disabled={!canSubmit}
             className={cn("py-3 text-xs", !canSubmit && "bg-[#F8FAFC]")}
           >
-            Create account
+            {isSubmitting ? "Creating account…" : "Create account"}
           </Button>
         </form>
         <OrDivider />

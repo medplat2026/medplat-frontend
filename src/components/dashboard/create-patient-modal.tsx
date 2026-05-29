@@ -1,6 +1,8 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useId, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   allDocumentsUploaded,
   createEmptyDocumentUploads,
@@ -13,7 +15,21 @@ import { Button } from "@/components/ui/Button";
 import { ModalFormField } from "@/components/ui/modal-form-field";
 import { ModalStepProgress } from "@/components/ui/modal-step-progress";
 import { SuccessConfirmModal } from "@/components/ui/success-confirm-modal";
+import {
+  CREATE_PATIENT_DOCUMENT_ERROR_KEY,
+  firstFieldErrorMessage,
+  validateCreatePatientStep1,
+  validateCreatePatientStep2Draft,
+  validateCreatePatientStep2Submit,
+} from "@/lib/create-patient-validation";
 import { cn } from "@/lib/utils";
+import {
+  buildHospitalCreatePatientStep1Payload,
+  buildHospitalCreatePatientStep2FormData,
+  hospitalDashboardQueryKey,
+  hospitalService,
+} from "@/services/hospital.service";
+import type { APIError } from "@/types/api";
 
 const genderOptions = [
   { value: "female", label: "Female" },
@@ -27,16 +43,32 @@ const yesNoOptions = [
   { value: "no", label: "No" },
 ];
 
+const urgencyOptions = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "critical", label: "Critical" },
+];
+
+const visibilityOptions = [
+  { value: "public", label: "Public" },
+  { value: "private", label: "Private" },
+];
+
 const contactOptions = [
-  { value: "email", label: "Email" },
   { value: "phone", label: "Phone" },
-  { value: "sms", label: "SMS" },
+  { value: "email", label: "Email" },
+  { value: "whatsapp", label: "WhatsApp" },
 ];
 
 const REQUIRED_PATIENT_DOCUMENTS = [
-  { id: "doctors_report", label: "Doctor's report", fieldName: "documentDoctorsReport" },
-  { id: "hospital_bill", label: "Hospital bill / estimate", fieldName: "documentHospitalBill" },
-  { id: "valid_id", label: "Valid ID card", fieldName: "documentValidId" },
+  { id: "doctors_report", label: "Doctor's report", fieldName: "doctors_report" },
+  {
+    id: "hospital_bill_estimate",
+    label: "Hospital bill / estimate",
+    fieldName: "hospital_bill_estimate",
+  },
+  { id: "valid_id_card", label: "Valid ID card", fieldName: "valid_id_card" },
 ] as const;
 
 type PatientDocumentId = (typeof REQUIRED_PATIENT_DOCUMENTS)[number]["id"];
@@ -56,14 +88,19 @@ function firstNameFromFullName(fullName: string): string {
 }
 
 export function CreatePatientModal({ triggerClassName }: CreatePatientModalProps) {
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(1);
-  const stepRef = useRef(step);
-  stepRef.current = step;
   const [successOpen, setSuccessOpen] = useState(false);
   const [successPatientFirstName, setSuccessPatientFirstName] = useState("");
   const [patientDocuments, setPatientDocuments] = useState<PatientDocumentsMap>(EMPTY_PATIENT_DOCUMENTS);
   const [documentsValidationError, setDocumentsValidationError] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [patientId, setPatientId] = useState<number | null>(null);
+  const [medicalCaseId, setMedicalCaseId] = useState<number | null>(null);
+  const [step1FieldErrors, setStep1FieldErrors] = useState<Record<string, string>>({});
+  const [step2FieldErrors, setStep2FieldErrors] = useState<Record<string, string>>({});
+  const formRef = useRef<HTMLFormElement>(null);
   const formId = useId();
 
   function resetPatientDocuments() {
@@ -74,6 +111,8 @@ export function CreatePatientModal({ triggerClassName }: CreatePatientModalProps
   function resetCreateFlow() {
     setOpen(false);
     setStep(1);
+    setPatientId(null);
+    setMedicalCaseId(null);
     resetPatientDocuments();
   }
 
@@ -81,13 +120,105 @@ export function CreatePatientModal({ triggerClassName }: CreatePatientModalProps
     setOpen(next);
     if (!next) {
       setStep(1);
+      setPatientId(null);
+      setMedicalCaseId(null);
       resetPatientDocuments();
+      setIsSubmitting(false);
+      setStep1FieldErrors({});
+      setStep2FieldErrors({});
     }
   }
 
   function handleSuccessOpenChange(next: boolean) {
     setSuccessOpen(next);
     if (!next) setSuccessPatientFirstName("");
+  }
+
+  async function submitStep1(options: { advanceToStep2: boolean }) {
+    const form = formRef.current;
+    if (!form) return;
+    const fd = new FormData(form);
+    const step1Errors = validateCreatePatientStep1(fd);
+    if (Object.keys(step1Errors).length > 0) {
+      setStep1FieldErrors(step1Errors);
+      const msg = firstFieldErrorMessage(step1Errors);
+      if (msg) toast.error(msg);
+      return;
+    }
+    setStep1FieldErrors({});
+
+    const strictRequired = options.advanceToStep2;
+    setIsSubmitting(true);
+    try {
+      const payload = buildHospitalCreatePatientStep1Payload(fd, strictRequired);
+      const result = await hospitalService.patchCreatePatientStep1(payload);
+      setPatientId(result.patient_id);
+      setMedicalCaseId(result.medical_case_id);
+      toast.success(options.advanceToStep2 ? "Step 1 saved." : "Draft saved.");
+      if (options.advanceToStep2) {
+        setStep(2);
+        setStep2FieldErrors({});
+      }
+    } catch (error) {
+      const { message } = error as APIError;
+      toast.error(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function submitStep2(submitCase: boolean) {
+    const form = formRef.current;
+    if (!form || patientId == null) {
+      toast.error("Patient data is missing. Please complete step 1 again.");
+      return;
+    }
+    const formData = new FormData(form);
+    const documentsComplete = allDocumentsUploaded(REQUIRED_PATIENT_DOCUMENTS, patientDocuments);
+    const step2Errors = submitCase
+      ? validateCreatePatientStep2Submit(formData, documentsComplete)
+      : validateCreatePatientStep2Draft(formData);
+    if (Object.keys(step2Errors).length > 0) {
+      setStep2FieldErrors(step2Errors);
+      setDocumentsValidationError(Boolean(step2Errors[CREATE_PATIENT_DOCUMENT_ERROR_KEY]));
+      const msg = firstFieldErrorMessage(step2Errors);
+      if (msg) toast.error(msg);
+      return;
+    }
+    setStep2FieldErrors({});
+    setDocumentsValidationError(false);
+    const strictRequired = submitCase;
+    setIsSubmitting(true);
+    try {
+      const multipartBody = buildHospitalCreatePatientStep2FormData(
+        formData,
+        patientId,
+        medicalCaseId,
+        submitCase,
+        {
+          doctors_report: patientDocuments.doctors_report,
+          hospital_bill_estimate: patientDocuments.hospital_bill_estimate,
+          valid_id_card: patientDocuments.valid_id_card,
+        },
+        strictRequired,
+      );
+      await hospitalService.postCreatePatientStep2(multipartBody);
+      const fullName = String(formData.get("fullName") ?? "");
+      if (submitCase) {
+        await queryClient.invalidateQueries({ queryKey: hospitalDashboardQueryKey });
+        setSuccessPatientFirstName(firstNameFromFullName(fullName));
+        resetCreateFlow();
+        setSuccessOpen(true);
+      } else {
+        toast.success("Draft saved.");
+        setStep2FieldErrors({});
+      }
+    } catch (error) {
+      const { message } = error as APIError;
+      toast.error(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -104,73 +235,85 @@ export function CreatePatientModal({ triggerClassName }: CreatePatientModalProps
         title="Create New Patient"
         subtitle={
           step === 1
-            ? "Enter patient personal details & Medical need to create their profile"
-            : "Enter patient funding request & Verification uploads to create their profile"
+            ? "Enter patient personal details & medical need to create their profile"
+            : "Enter funding request details & verification uploads"
         }
         footer={
           step === 1 ? (
             <div className="flex flex-wrap justify-end gap-3">
-              <Button type="button" variant="outline" className="rounded-xl border-input-border px-5">
-                Save as draft
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl border-input-border px-5"
+                disabled={isSubmitting}
+                onClick={() => submitStep1({ advanceToStep2: false })}
+              >
+                {isSubmitting ? "Saving…" : "Save as draft"}
               </Button>
               <Button
                 type="button"
                 className="rounded-xl px-6"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setStep(2);
-                }}
+                disabled={isSubmitting}
+                onClick={() => submitStep1({ advanceToStep2: true })}
               >
-                Continue
+                {isSubmitting ? "Saving…" : "Continue"}
               </Button>
             </div>
           ) : (
             <div className="flex flex-wrap justify-end gap-3">
-              <Button type="button" variant="outline" className="rounded-xl border-input-border px-5" onClick={() => setStep(1)}>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl border-input-border px-5"
+                disabled={isSubmitting}
+                onClick={() => {
+                  setStep2FieldErrors({});
+                  setDocumentsValidationError(false);
+                  setStep(1);
+                }}
+              >
                 Go back
               </Button>
-              <Button type="submit" form={formId} className="rounded-xl px-6">
-                Submit
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl border-input-border px-5"
+                disabled={isSubmitting}
+                onClick={() => submitStep2(false)}
+              >
+                {isSubmitting ? "Saving…" : "Save to draft"}
+              </Button>
+              <Button
+                type="button"
+                className="rounded-xl px-6"
+                disabled={isSubmitting}
+                onClick={() => submitStep2(true)}
+              >
+                {isSubmitting ? "Submitting…" : "Submit"}
               </Button>
             </div>
           )
         }
       >
-        <form
-          id={formId}
-          className="space-y-5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            // Single <form> wraps both steps; implicit submit (e.g. Enter) or stray submits must not
-            // complete the flow until the user is on step 2 and submits intentionally.
-            if (stepRef.current !== 2) return;
-            if (!allDocumentsUploaded(REQUIRED_PATIENT_DOCUMENTS, patientDocuments)) {
-              setDocumentsValidationError(true);
-              return;
-            }
-            setDocumentsValidationError(false);
-            const fd = new FormData(e.currentTarget);
-            const fullName = String(fd.get("fullName") ?? "");
-            for (const doc of REQUIRED_PATIENT_DOCUMENTS) {
-              const file = patientDocuments[doc.id];
-              if (file) fd.append(doc.fieldName, file);
-            }
-            setSuccessPatientFirstName(firstNameFromFullName(fullName));
-            resetCreateFlow();
-            setSuccessOpen(true);
-          }}
-        >
+        <form ref={formRef} id={formId} className="space-y-5" onSubmit={(e) => e.preventDefault()}>
           <div hidden={step !== 1}>
-            <StepOneFields formId={formId} />
+            <StepOneFields formId={formId} fieldErrors={step1FieldErrors} />
           </div>
           <div hidden={step !== 2}>
             <StepTwoFields
               formId={formId}
+              fieldErrors={step2FieldErrors}
               uploads={patientDocuments}
               onUploadsChange={(next) => {
                 setPatientDocuments(next);
-                if (allDocumentsUploaded(REQUIRED_PATIENT_DOCUMENTS, next)) setDocumentsValidationError(false);
+                if (allDocumentsUploaded(REQUIRED_PATIENT_DOCUMENTS, next)) {
+                  setDocumentsValidationError(false);
+                  setStep2FieldErrors((prev) => {
+                    if (!prev[CREATE_PATIENT_DOCUMENT_ERROR_KEY]) return prev;
+                    const { [CREATE_PATIENT_DOCUMENT_ERROR_KEY]: _, ...rest } = prev;
+                    return rest;
+                  });
+                }
               }}
               showDocumentsError={documentsValidationError}
             />
@@ -188,7 +331,7 @@ export function CreatePatientModal({ triggerClassName }: CreatePatientModalProps
   );
 }
 
-function StepOneFields({ formId }: { formId: string }) {
+function StepOneFields({ formId, fieldErrors }: { formId: string; fieldErrors: Record<string, string> }) {
   return (
     <div className="space-y-5">
       <ModalFormField
@@ -198,6 +341,8 @@ function StepOneFields({ formId }: { formId: string }) {
         label="Full Name"
         placeholder="Enter full legal name"
         autoComplete="name"
+        requiredIndicator
+        error={fieldErrors.fullName}
       />
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -230,6 +375,8 @@ function StepOneFields({ formId }: { formId: string }) {
           label="Phone Number"
           placeholder="(+234)-5433-3472-7365"
           autoComplete="tel"
+          requiredIndicator
+          error={fieldErrors.phone}
         />
         <ModalFormField
           control="input"
@@ -239,6 +386,8 @@ function StepOneFields({ formId }: { formId: string }) {
           label="Email Address"
           placeholder="Patient@email.com"
           autoComplete="email"
+          requiredIndicator
+          error={fieldErrors.email}
         />
       </div>
 
@@ -257,6 +406,7 @@ function StepOneFields({ formId }: { formId: string }) {
           name="supportFor"
           label="Who is the support for?"
           placeholder="Who's the support for"
+          error={fieldErrors.supportFor}
         />
       </div>
 
@@ -267,7 +417,7 @@ function StepOneFields({ formId }: { formId: string }) {
           name="urgent"
           label="Is it urgent? (Yes/No)"
           placeholder="Yes/No"
-          defaultValue=""
+          defaultValue="no"
           options={yesNoOptions}
         />
         <ModalFormField
@@ -276,6 +426,7 @@ function StepOneFields({ formId }: { formId: string }) {
           name="hospital"
           label="Hospital receiving treatment"
           placeholder="Enter hospital name"
+          error={fieldErrors.hospital}
         />
       </div>
 
@@ -286,6 +437,8 @@ function StepOneFields({ formId }: { formId: string }) {
         label="What type of treatment is needed?"
         placeholder="Briefly describe the treatment required (250 words max)..."
         rows={5}
+        requiredIndicator
+        error={fieldErrors.treatmentDescription}
       />
     </div>
   );
@@ -293,62 +446,134 @@ function StepOneFields({ formId }: { formId: string }) {
 
 function StepTwoFields({
   formId,
+  fieldErrors,
   uploads,
   onUploadsChange,
   showDocumentsError,
 }: {
   formId: string;
+  fieldErrors: Record<string, string>;
   uploads: PatientDocumentsMap;
   onUploadsChange: (uploads: PatientDocumentsMap) => void;
   showDocumentsError: boolean;
 }) {
   const fileInputId = `${formId}-patient-docs`;
+  const documentBlockError = fieldErrors[CREATE_PATIENT_DOCUMENT_ERROR_KEY];
+  const documentsShowError = showDocumentsError || Boolean(documentBlockError);
 
   return (
     <div className="space-y-5">
-      <ModalFormField
-        control="input"
-        id={`${formId}-estimated-cost`}
-        name="estimatedCost"
-        label="Estimated treatment cost"
-        placeholder="Enter the total estimated cost of treatment"
-      />
-      <ModalFormField
-        control="input"
-        id={`${formId}-amount-raised`}
-        name="amountRaised"
-        label="Amount already raised (optional)"
-        placeholder="Enter amount already available, if any"
-      />
-      <ModalFormField
-        control="input"
-        id={`${formId}-amount-needed`}
-        name="amountNeeded"
-        label="Amount still needed"
-        placeholder="Enter the remaining amount required"
-      />
-      <ModalFormField
-        control="select"
-        id={`${formId}-visible-public`}
-        name="visiblePublic"
-        label="Make case visible to donors publicly?"
-        placeholder="Yes/No"
-        defaultValue=""
-        options={yesNoOptions}
-      />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <ModalFormField
+          control="select"
+          id={`${formId}-urgency-level`}
+          name="urgency_level"
+          label="Urgency level"
+          placeholder="Select urgency"
+          defaultValue=""
+          options={urgencyOptions}
+          requiredIndicator
+          error={fieldErrors.urgency_level}
+        />
+        <ModalFormField
+          control="input"
+          id={`${formId}-expected-start`}
+          name="expected_start_date"
+          type="date"
+          label="Expected start date"
+        />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <ModalFormField
+          control="input"
+          id={`${formId}-estimated-cost`}
+          name="estimated_cost"
+          type="number"
+          inputMode="decimal"
+          min={0}
+          step="0.01"
+          label="Estimated treatment cost"
+          placeholder="0.00"
+          requiredIndicator
+          error={fieldErrors.estimated_cost}
+        />
+        <ModalFormField
+          control="input"
+          id={`${formId}-amount-paid`}
+          name="amount_already_paid"
+          type="number"
+          inputMode="decimal"
+          min={0}
+          step="0.01"
+          label="Amount already paid"
+          placeholder="0"
+          defaultValue="0"
+          error={fieldErrors.amount_already_paid}
+        />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <ModalFormField
+          control="select"
+          id={`${formId}-visibility`}
+          name="visibility"
+          label="Case visibility"
+          defaultValue="public"
+          options={visibilityOptions}
+        />
+        <ModalFormField
+          control="select"
+          id={`${formId}-fundraising-approved`}
+          name="patient_approved_fundraising"
+          label="Patient approved fundraising?"
+          defaultValue="no"
+          options={yesNoOptions}
+        />
+      </div>
+
       <ModalFormField
         control="select"
         id={`${formId}-contact-method`}
-        name="contactMethod"
+        name="preferred_contact_method"
         label="Preferred contact method"
-        placeholder="Select how you prefer to be contacted"
-        defaultValue=""
+        defaultValue="phone"
         options={contactOptions}
+        error={fieldErrors.preferred_contact_method}
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <ModalFormField
+          control="input"
+          id={`${formId}-family-name`}
+          name="family_contact_name"
+          label="Family contact name"
+          placeholder="Enter name"
+          autoComplete="name"
+        />
+        <ModalFormField
+          control="input"
+          id={`${formId}-family-phone`}
+          name="family_contact_phone"
+          type="tel"
+          label="Family contact phone"
+          placeholder="(+234)-5433-3472-7365"
+          autoComplete="tel"
+        />
+      </div>
+
+      <ModalFormField
+        control="textarea"
+        id={`${formId}-patient-story`}
+        name="patient_story"
+        label="Patient story"
+        placeholder="Briefly describe the patient's story…"
+        rows={4}
       />
 
       <details className="group rounded-xl border border-input-border bg-white open:shadow-sm">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-semibold text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
-          <span>Select documents</span>
+          <span>Upload documents</span>
           <span className="text-muted-foreground transition-transform group-open:rotate-180" aria-hidden>
             <DocumentsDetailsChevron />
           </span>
@@ -359,9 +584,10 @@ function StepTwoFields({
             fileInputId={fileInputId}
             uploads={uploads}
             onUploadsChange={onUploadsChange}
-            showError={showDocumentsError}
+            showError={documentsShowError}
             completeMessage="You can submit the patient profile."
           />
+          {documentBlockError ? <p className="mt-2 text-xs text-destructive">{documentBlockError}</p> : null}
         </div>
       </details>
     </div>

@@ -9,6 +9,8 @@ import { InputField } from "@/components/ui/input-field";
 import { ROUTES } from "@/constants/routes";
 import { HOSPITAL_ONBOARDING_STORAGE } from "@/constants/onboarding";
 import { isValidEmail } from "@/lib/contact-validation";
+import { authService } from "@/services/auth.service";
+import type { APIError } from "@/types/api";
 import { OnboardingHeading } from "@/components/onboarding/onboarding-heading";
 import { OnboardingHeroImage } from "@/components/onboarding/onboarding-hero-image";
 import { OnboardingScaffold } from "@/components/onboarding/onboarding-scaffold";
@@ -18,15 +20,18 @@ import { SocialLoginButtons } from "@/components/onboarding/social-login-buttons
 export function HospitalEmailStep() {
   const router = useRouter();
   const [email, setEmail] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.sessionStorage.removeItem(HOSPITAL_ONBOARDING_STORAGE.emailVerified);
     window.sessionStorage.removeItem(HOSPITAL_ONBOARDING_STORAGE.verifiedEmail);
+    window.sessionStorage.removeItem(HOSPITAL_ONBOARDING_STORAGE.verifyEmailUid);
+    window.sessionStorage.removeItem(HOSPITAL_ONBOARDING_STORAGE.registerHospitalUid);
     window.sessionStorage.removeItem(HOSPITAL_ONBOARDING_STORAGE.registrationDraft);
   }, []);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmed = email.trim();
     if (!trimmed) {
@@ -37,14 +42,24 @@ export function HospitalEmailStep() {
       toast.error("Please enter a valid email address.");
       return;
     }
-    router.push(`${ROUTES.onboarding.hospital.verify}?email=${encodeURIComponent(trimmed)}`);
+
+    setIsSubmitting(true);
+    try {
+      const { message, uid } = await authService.hospitalInitiateEmail({ email: trimmed });
+      window.sessionStorage.setItem(HOSPITAL_ONBOARDING_STORAGE.verifyEmailUid, String(uid));
+      toast.success(message ?? "Verification code sent. Check your inbox.");
+      router.push(`${ROUTES.onboarding.hospital.verify}?email=${encodeURIComponent(trimmed)}`);
+    } catch (error) {
+      const { message } = error as APIError;
+      toast.error(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <OnboardingScaffold
-      hero={
-        <OnboardingHeroImage alt="Hospital onboarding" carouselActiveIndex={0} />
-      }
+      hero={<OnboardingHeroImage alt="Hospital onboarding" carouselActiveIndex={0} />}
     >
       <div className="flex min-h-0 w-full flex-1 flex-col justify-center gap-8">
         <OnboardingHeading
@@ -61,8 +76,8 @@ export function HospitalEmailStep() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-          <Button type="submit" fullWidth>
-            Send Verification Code
+          <Button type="submit" fullWidth disabled={isSubmitting}>
+            {isSubmitting ? "Sending…" : "Send Verification Code"}
           </Button>
         </form>
         <OrDivider />

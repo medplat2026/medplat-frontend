@@ -1,64 +1,42 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   allDocumentsUploaded,
   createEmptyDocumentUploads,
   DocumentsDetailsChevron,
   SequentialDocumentsUpload,
   type DocumentUploadsMap,
+  type RequiredDocument,
 } from "@/components/dashboard/sequential-documents-upload";
 import { AppModal } from "@/components/ui/app-modal";
 import { Button } from "@/components/ui/Button";
 import { ModalFormField } from "@/components/ui/modal-form-field";
 import { ModalStepProgress } from "@/components/ui/modal-step-progress";
+import type { SelectOption } from "@/components/ui/select-field";
+import {
+  buildHospitalBasicInfoFromFormData,
+  buildHospitalServiceCapacityFormData,
+  hospitalService,
+} from "@/services/hospital.service";
+import type { APIError } from "@/types/api";
+import type { HospitalOnboardingChoices } from "@/types/hospital";
 
-const facilityTypeOptions = [
-  { value: "general", label: "General hospital" },
-  { value: "specialist", label: "Specialist hospital" },
-  { value: "clinic", label: "Clinic" },
-  { value: "diagnostic", label: "Diagnostic center" },
-  { value: "other", label: "Other" },
-];
-
-const yesNoOptions = [
+const yesNoOptions: SelectOption[] = [
   { value: "yes", label: "Yes" },
   { value: "no", label: "No" },
 ];
 
-const medicalCaseOptions = [
-  { value: "cardiac", label: "Cardiac surgery" },
-  { value: "orthopedic", label: "Orthopedic surgery" },
-  { value: "oncology", label: "Oncology" },
-  { value: "transplant", label: "Organ transplant" },
-  { value: "emergency", label: "Emergency / trauma" },
-  { value: "other", label: "Other" },
-];
-
-const departmentOptions = [
-  { value: "emergency", label: "Emergency" },
-  { value: "surgery", label: "Surgery" },
-  { value: "icu", label: "ICU" },
-  { value: "pediatrics", label: "Pediatrics" },
-  { value: "maternity", label: "Maternity" },
-  { value: "radiology", label: "Radiology" },
-];
-
-const REQUIRED_HOSPITAL_DOCUMENTS = [
-  { id: "operating_license", label: "Operating License", fieldName: "documentOperatingLicense" },
-  { id: "cac_certificate", label: "CAC / Registration Certificate", fieldName: "documentCacCertificate" },
-  {
-    id: "representative_id",
-    label: "Authorized Representative ID",
-    fieldName: "documentRepresentativeId",
-  },
-] as const;
-
-type HospitalDocumentId = (typeof REQUIRED_HOSPITAL_DOCUMENTS)[number]["id"];
-
-type HospitalDocumentsMap = DocumentUploadsMap<HospitalDocumentId>;
-
-const EMPTY_HOSPITAL_DOCUMENTS = createEmptyDocumentUploads(REQUIRED_HOSPITAL_DOCUMENTS);
+function documentSpecsFromChoices(
+  choices: HospitalOnboardingChoices,
+): RequiredDocument<string>[] {
+  return choices.document_types.map((doc) => ({
+    id: doc.value,
+    label: doc.label,
+    fieldName: `document_${doc.value}`,
+  }));
+}
 
 export type CompleteHospitalRegistrationModalProps = {
   open: boolean;
@@ -74,13 +52,57 @@ export function CompleteHospitalRegistrationModal({
   const [step, setStep] = useState(1);
   const stepRef = useRef(step);
   stepRef.current = step;
-  const [hospitalDocuments, setHospitalDocuments] = useState<HospitalDocumentsMap>(EMPTY_HOSPITAL_DOCUMENTS);
+  const [choices, setChoices] = useState<HospitalOnboardingChoices | null>(null);
+  const [choicesLoading, setChoicesLoading] = useState(false);
+  const [hospitalDocuments, setHospitalDocuments] = useState<DocumentUploadsMap<string>>({});
   const [documentsValidationError, setDocumentsValidationError] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
   const formId = useId();
   const fileInputId = `${formId}-hospital-docs`;
 
+  const requiredDocuments = useMemo(
+    () => (choices ? documentSpecsFromChoices(choices) : []),
+    [choices],
+  );
+
+  const documentTypeValues = useMemo(
+    () => requiredDocuments.map((doc) => doc.id),
+    [requiredDocuments],
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setChoicesLoading(true);
+    hospitalService
+      .getOnboardingChoices()
+      .then((data) => {
+        if (!cancelled) {
+          setChoices(data);
+          setHospitalDocuments(createEmptyDocumentUploads(documentSpecsFromChoices(data)));
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          const { message } = error as APIError;
+          toast.error(message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setChoicesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
   function resetDocuments() {
-    setHospitalDocuments(EMPTY_HOSPITAL_DOCUMENTS);
+    if (choices) {
+      setHospitalDocuments(createEmptyDocumentUploads(documentSpecsFromChoices(choices)));
+    } else {
+      setHospitalDocuments({});
+    }
     setDocumentsValidationError(false);
   }
 
@@ -89,11 +111,42 @@ export function CompleteHospitalRegistrationModal({
     if (!next) {
       setStep(1);
       resetDocuments();
+      setIsSubmitting(false);
+    }
+  }
+
+  async function submitBasicInfo(isDraft: boolean) {
+    const form = formRef.current;
+    if (!form) return;
+    if (!choices) {
+      toast.error("Registration options are still loading. Please wait.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const payload = buildHospitalBasicInfoFromFormData(new FormData(form), isDraft);
+      const data = await hospitalService.patchMyHospitalBasicInfo(payload);
+      const message =
+        typeof data.message === "string"
+          ? data.message
+          : isDraft
+            ? "Draft saved."
+            : "Basic information saved.";
+      toast.success(message);
+      if (!isDraft) setStep(2);
+    } catch (error) {
+      const { message } = error as APIError;
+      toast.error(message);
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
   const stepTitle =
     step === 1 ? "Basic Information *" : "Service capacity & Document verification *";
+
+  const optionsReady = Boolean(choices) && !choicesLoading;
 
   return (
     <AppModal
@@ -103,70 +156,117 @@ export function CompleteHospitalRegistrationModal({
       progress={<ModalStepProgress currentStep={step} totalSteps={2} />}
       title={stepTitle}
       footer={
-        step === 1 ? (
+        !optionsReady ? null : step === 1 ? (
           <div className="flex flex-wrap justify-end gap-3">
-            <Button type="button" variant="outline" className="rounded-xl border-input-border px-5">
-              Save as draft
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl border-input-border px-5"
+              disabled={isSubmitting}
+              onClick={() => submitBasicInfo(true)}
+            >
+              {isSubmitting ? "Saving…" : "Save as draft"}
             </Button>
             <Button
               type="button"
               className="rounded-xl px-6"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setStep(2);
-              }}
+              disabled={isSubmitting}
+              onClick={() => submitBasicInfo(false)}
             >
-              Continue
+              {isSubmitting ? "Saving…" : "Continue"}
             </Button>
           </div>
         ) : (
           <div className="flex flex-wrap justify-end gap-3">
-            <Button type="button" variant="outline" className="rounded-xl border-input-border px-5" onClick={() => setStep(1)}>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl border-input-border px-5"
+              disabled={isSubmitting}
+              onClick={() => setStep(1)}
+            >
               Go back
             </Button>
-            <Button type="submit" form={formId} className="rounded-xl px-6">
-              Submit
+            <Button type="submit" form={formId} className="rounded-xl px-6" disabled={isSubmitting}>
+              {isSubmitting ? "Submitting…" : "Submit"}
             </Button>
           </div>
         )
       }
     >
-      <form
-        id={formId}
-        className="space-y-5"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (stepRef.current !== 2) return;
-          if (!allDocumentsUploaded(REQUIRED_HOSPITAL_DOCUMENTS, hospitalDocuments)) {
-            setDocumentsValidationError(true);
-            return;
-          }
-          setDocumentsValidationError(false);
-          onComplete();
-        }}
-      >
-        <div hidden={step !== 1}>
-          <HospitalRegistrationStepOne formId={formId} />
-        </div>
-        <div hidden={step !== 2}>
-          <HospitalRegistrationStepTwo
-            formId={formId}
-            fileInputId={fileInputId}
-            uploads={hospitalDocuments}
-            onUploadsChange={(next) => {
-              setHospitalDocuments(next);
-              if (allDocumentsUploaded(REQUIRED_HOSPITAL_DOCUMENTS, next)) setDocumentsValidationError(false);
-            }}
-            showDocumentsError={documentsValidationError}
-          />
-        </div>
-      </form>
+      {choicesLoading || !choices ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">Loading registration options…</p>
+      ) : (
+        <form
+          ref={formRef}
+          id={formId}
+          className="space-y-5"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (stepRef.current !== 2) return;
+            if (!choices) return;
+
+            if (!allDocumentsUploaded(requiredDocuments, hospitalDocuments)) {
+              setDocumentsValidationError(true);
+              return;
+            }
+            setDocumentsValidationError(false);
+
+            setIsSubmitting(true);
+            try {
+              const fd = buildHospitalServiceCapacityFormData(
+                new FormData(e.currentTarget),
+                hospitalDocuments as Record<string, File>,
+                documentTypeValues,
+              );
+              const data = await hospitalService.postMyHospitalServiceCapacity(fd);
+              const message =
+                typeof data.message === "string"
+                  ? data.message
+                  : "Hospital registration submitted.";
+              toast.success(message);
+              onComplete();
+            } catch (error) {
+              const { message } = error as APIError;
+              toast.error(message);
+            } finally {
+              setIsSubmitting(false);
+            }
+          }}
+        >
+          <div hidden={step !== 1}>
+            <HospitalRegistrationStepOne formId={formId} hospitalTypes={choices.hospital_types} />
+          </div>
+          <div hidden={step !== 2}>
+            <HospitalRegistrationStepTwo
+              formId={formId}
+              fileInputId={fileInputId}
+              medicalCaseOptions={choices.medical_case_types}
+              departmentOptions={choices.available_departments}
+              requiredDocuments={requiredDocuments}
+              uploads={hospitalDocuments}
+              onUploadsChange={(next) => {
+                setHospitalDocuments(next);
+                if (allDocumentsUploaded(requiredDocuments, next)) {
+                  setDocumentsValidationError(false);
+                }
+              }}
+              showDocumentsError={documentsValidationError}
+            />
+          </div>
+        </form>
+      )}
     </AppModal>
   );
 }
 
-function HospitalRegistrationStepOne({ formId }: { formId: string }) {
+function HospitalRegistrationStepOne({
+  formId,
+  hospitalTypes,
+}: {
+  formId: string;
+  hospitalTypes: SelectOption[];
+}) {
   return (
     <div className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -177,6 +277,7 @@ function HospitalRegistrationStepOne({ formId }: { formId: string }) {
           label="Hospital Name"
           placeholder="Enter your hospital's official name"
           autoComplete="organization"
+          requiredIndicator
         />
         <ModalFormField
           control="select"
@@ -185,7 +286,7 @@ function HospitalRegistrationStepOne({ formId }: { formId: string }) {
           label="Type of Facility"
           placeholder="Select the type of healthcare facility"
           defaultValue=""
-          options={facilityTypeOptions}
+          options={hospitalTypes}
         />
       </div>
 
@@ -230,12 +331,41 @@ function HospitalRegistrationStepOne({ formId }: { formId: string }) {
 
       <ModalFormField
         control="input"
-        id={`${formId}-full-address`}
-        name="fullAddress"
-        label="Full Address"
+        id={`${formId}-street-address`}
+        name="streetAddress"
+        label="Street Address"
         placeholder="Enter your complete street address"
         autoComplete="street-address"
+        requiredIndicator
       />
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ModalFormField
+          control="input"
+          id={`${formId}-city`}
+          name="city"
+          label="City"
+          placeholder="City"
+          autoComplete="address-level2"
+          requiredIndicator
+        />
+        <ModalFormField
+          control="input"
+          id={`${formId}-state`}
+          name="state"
+          label="State"
+          placeholder="State (optional)"
+          autoComplete="address-level1"
+        />
+        <ModalFormField
+          control="input"
+          id={`${formId}-postal-code`}
+          name="postalCode"
+          label="Postal Code"
+          placeholder="Postal code (optional)"
+          autoComplete="postal-code"
+        />
+      </div>
     </div>
   );
 }
@@ -243,14 +373,20 @@ function HospitalRegistrationStepOne({ formId }: { formId: string }) {
 function HospitalRegistrationStepTwo({
   formId,
   fileInputId,
+  medicalCaseOptions,
+  departmentOptions,
+  requiredDocuments,
   uploads,
   onUploadsChange,
   showDocumentsError,
 }: {
   formId: string;
   fileInputId: string;
-  uploads: HospitalDocumentsMap;
-  onUploadsChange: (uploads: HospitalDocumentsMap) => void;
+  medicalCaseOptions: SelectOption[];
+  departmentOptions: SelectOption[];
+  requiredDocuments: RequiredDocument<string>[];
+  uploads: DocumentUploadsMap<string>;
+  onUploadsChange: (uploads: DocumentUploadsMap<string>) => void;
   showDocumentsError: boolean;
 }) {
   return (
@@ -261,9 +397,10 @@ function HospitalRegistrationStepTwo({
           id={`${formId}-medical-cases`}
           name="medicalCases"
           label="What medical cases do you handle?"
-          placeholder="List or select the types of cases you treat"
+          placeholder="Select a case type"
           defaultValue=""
           options={medicalCaseOptions}
+          requiredIndicator
         />
         <ModalFormField
           control="select"
@@ -273,25 +410,20 @@ function HospitalRegistrationStepTwo({
           placeholder="Yes/No"
           defaultValue=""
           options={yesNoOptions}
+          requiredIndicator
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <ModalFormField
-          control="input"
-          id={`${formId}-license-step2`}
-          name="licenseNumberConfirm"
-          label="Registration / License Number"
-          placeholder="Enter your valid registration or license number"
-        />
+      <div className="grid gap-4 sm:grid-cols-2">
         <ModalFormField
           control="select"
           id={`${formId}-departments`}
           name="departments"
           label="Available Departments"
-          placeholder="Select all departments available in your facility"
+          placeholder="Select a department"
           defaultValue=""
           options={departmentOptions}
+          requiredIndicator
         />
         <ModalFormField
           control="input"
@@ -313,7 +445,7 @@ function HospitalRegistrationStepTwo({
         </summary>
         <div className="border-t border-border px-4 pb-4 pt-3">
           <SequentialDocumentsUpload
-            documents={REQUIRED_HOSPITAL_DOCUMENTS}
+            documents={requiredDocuments}
             fileInputId={fileInputId}
             uploads={uploads}
             onUploadsChange={onUploadsChange}

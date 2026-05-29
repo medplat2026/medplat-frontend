@@ -6,6 +6,7 @@ import {
   getDashboardPageSubtitleSuffix,
   getDashboardPageTitle,
 } from "@/constants/dashboard-navigation";
+import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils";
 
 type DashboardHeaderProps = {
@@ -24,7 +25,7 @@ function formatDashboardDate(d: Date): string {
 
 export function DashboardHeader({ hospitalName, onMenuClick }: DashboardHeaderProps) {
   const pathname = usePathname();
-  const isDashboardHome = pathname === "/dashboard";
+  const isDashboardHome = pathname === ROUTES.hospital.dashboard;
   const pageTitle = isDashboardHome ? `Welcome, ${hospitalName}` : getDashboardPageTitle(pathname);
   const subtitleSuffix = getDashboardPageSubtitleSuffix(pathname);
   const today = new Date();

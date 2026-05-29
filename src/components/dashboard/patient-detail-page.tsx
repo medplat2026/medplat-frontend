@@ -121,7 +121,7 @@ function LinkedCaseRow({ linkedCase }: { linkedCase: LinkedCase }) {
         title="View case details"
         className={cn(
           "flex w-full flex-col gap-4 rounded-xl p-4 text-left transition-all sm:flex-row sm:items-center sm:justify-between",
-          "cursor-pointer hover:shadow-md hover:translate-y-[-2px] hover:ring-onboarding-blue/25",
+          "cursor-pointer hover:shadow-md hover:ring-2 hover:ring-onboarding-blue/25",
           linkedCaseToneStyles[linkedCase.status],
         )}
       >
@@ -139,6 +139,10 @@ function LinkedCaseRow({ linkedCase }: { linkedCase: LinkedCase }) {
 }
 
 function PatientProfileCard({ patient }: { patient: PatientDetail }) {
+  const serverPatientId = Number.parseInt(String(patient.id), 10);
+  const createCasePatientId =
+    Number.isFinite(serverPatientId) && serverPatientId > 0 ? serverPatientId : undefined;
+
   return (
     <section className="rounded-2xl border border-border bg-white p-5 shadow-sm md:p-6">
       <div className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-center sm:justify-between">
@@ -152,6 +156,7 @@ function PatientProfileCard({ patient }: { patient: PatientDetail }) {
           </div>
         </div>
         <CreateCaseModal
+          patientId={createCasePatientId}
           triggerVariant="brand"
           triggerClassName="w-full shrink-0 rounded-lg px-8 py-2 sm:w-auto"
         />
@@ -197,7 +202,7 @@ export function PatientDetailPage({ patientId }: PatientDetailPageProps) {
   return (
     <div className="mt-4 space-y-4">
       <Link
-        href={ROUTES.patients}
+        href={ROUTES.hospital.patients}
         className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         <span aria-hidden>←</span>

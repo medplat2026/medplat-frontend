@@ -1,7 +1,7 @@
 import { HospitalRegistrationFlow } from "@/components/dashboard/hospital-registration-flow";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 
-export default function CasesLayout({
+export default function HospitalLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;

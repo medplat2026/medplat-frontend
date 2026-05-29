@@ -136,22 +136,22 @@ export function CasesPage() {
       <DataTableToolbar
         className="pb-0"
         primaryAction={<CreatePatientModal triggerClassName="rounded-lg px-4 py-2.5" />}
-          searchPlaceholder="Search cases by..."
-          searchValue={search}
-          onSearchChange={(value) => {
-            setSearch(value);
-            setPage(1);
-          }}
-          showFilter={false}
-          filterControl={
-            <StatusFilterDropdown
-              value={statusFilter}
-              onChange={(value) => {
-                setStatusFilter(value);
-                setPage(1);
-              }}
-            />
-          }
+        searchPlaceholder="Search cases by..."
+        searchValue={search}
+        onSearchChange={(value) => {
+          setSearch(value);
+          setPage(1);
+        }}
+        showFilter={false}
+        filterControl={
+          <StatusFilterDropdown
+            value={statusFilter}
+            onChange={(value) => {
+              setStatusFilter(value);
+              setPage(1);
+            }}
+          />
+        }
       />
 
       <DataTableBody>
