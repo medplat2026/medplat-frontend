@@ -14,6 +14,8 @@ export type AuthUser = {
   registration_stage?: string;
   /** When true, skip hospital dashboard completion modals. */
   hospital_profile_completed?: boolean;
+  /** Some APIs expose this instead of `hospital_profile_completed` (same meaning). */
+  profile_completed?: boolean;
   onboarding_completed?: boolean;
   next_required_step?: string | null;
   created_at: string;

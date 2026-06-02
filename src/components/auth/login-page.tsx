@@ -63,12 +63,14 @@ export function LoginPage() {
       }
       toast.success("Signed in successfully.", {
         description:
-          portal == null ? "Choose hospital or patient to continue." : undefined,
+          portal == null ? "Choose hospital, patient, or donor to continue." : undefined,
       });
       if (portal === "patient") {
         router.push(ROUTES.patient.dashboard);
       } else if (portal === "hospital") {
         router.push(ROUTES.hospital.dashboard);
+      } else if (portal === "donor") {
+        router.push(ROUTES.donor.dashboard);
       } else {
         router.push(ROUTES.home);
       }

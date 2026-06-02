@@ -24,6 +24,8 @@ import { cn } from "@/lib/utils";
 import {
   buildHospitalCreatePatientStep2FormData,
   hospitalDashboardQueryKey,
+  hospitalMyPatientDetailQueryKeyRoot,
+  hospitalMyPatientsQueryKeyRoot,
   hospitalService,
 } from "@/services/hospital.service";
 import type { APIError } from "@/types/api";
@@ -147,6 +149,8 @@ export function CreateCaseModal({
         submitCase,
       );
       await hospitalService.patchCreatePatientMedicalCase(multipartBody);
+      await queryClient.invalidateQueries({ queryKey: hospitalMyPatientsQueryKeyRoot });
+      await queryClient.invalidateQueries({ queryKey: hospitalMyPatientDetailQueryKeyRoot });
       await queryClient.invalidateQueries({ queryKey: hospitalDashboardQueryKey });
 
       if (submitCase) {

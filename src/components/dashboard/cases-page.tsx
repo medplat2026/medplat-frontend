@@ -1,175 +1,170 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useEffect, useId, useMemo, useState } from "react";
 import { CaseCard } from "@/components/dashboard/case-card";
 import { CreatePatientModal } from "@/components/dashboard/create-patient-modal";
 import { Button } from "@/components/ui/Button";
 import {
   DataTableBody,
+  DataTableCard,
   DataTablePagination,
   DataTableToolbar,
 } from "@/components/ui/data-table";
-import { MOCK_CASES } from "@/data/mock-cases";
-import { useOutsidePointerDismiss } from "@/hooks/use-outside-pointer-dismiss";
-import { cn } from "@/lib/utils";
-import type { CaseStatus, CaseStatusFilter } from "@/types/case";
+import { SelectField, type SelectOption } from "@/components/ui/select-field";
+import type { APIError } from "@/types/api";
+import {
+  HOSPITAL_MEDICAL_CASES_PAGE_SIZE,
+  hospitalMedicalCasesQueryKeyRoot,
+  hospitalService,
+  mapMedicalCaseRowToCaseRecord,
+} from "@/services/hospital.service";
 
-const TOTAL_PAGES = 25;
-const PAGE_SIZE = 4;
+/** `ordering` query: ascending = field name, descending = `-` + field (e.g. `created_at`, `-created_at`). */
+const ORDERING_OPTIONS: SelectOption[] = [
+  { value: "", label: "Default sort" },
+  { value: "-created_at", label: "Newest first" },
+  { value: "created_at", label: "Oldest first" },
+];
 
-const STATUS_FILTER_OPTIONS: { value: CaseStatusFilter; label: string; dotClassName?: string }[] =
-  [
-    { value: "all", label: "All Status", dotClassName: "bg-onboarding-teal-dark" },
-    { value: "Approved", label: "Approved" },
-    { value: "Funded", label: "Funded" },
-    { value: "Submitted", label: "Submitted" },
-    { value: "Draft", label: "Draft" },
-  ];
-
-function FilterIcon({ className }: { className?: string }) {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
-      <path
-        d="M4 5h16l-6.5 8.2V19l-3 1.5v-7.3L4 5Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function StatusFilterDropdown({
-  value,
-  onChange,
-}: {
-  value: CaseStatusFilter;
-  onChange: (value: CaseStatusFilter) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
-  useOutsidePointerDismiss(open, panelRef, () => setOpen(false));
-
-  const selectedLabel =
-    STATUS_FILTER_OPTIONS.find((option) => option.value === value)?.label ?? "All Status";
-
-  return (
-    <div ref={panelRef} className="relative w-full sm:w-auto sm:shrink-0">
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => setOpen((prev) => !prev)}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border-input-border bg-white py-2.5 text-sm font-semibold text-foreground shadow-sm sm:w-auto"
-      >
-        <FilterIcon className="text-muted-foreground" />
-        Filter
-      </Button>
-
-      {open ? (
-        <ul
-          role="listbox"
-          aria-label="Filter by status"
-          className="absolute right-0 z-30 mt-2 min-w-[180px] overflow-hidden rounded-xl border border-border bg-white py-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)]"
-        >
-          {STATUS_FILTER_OPTIONS.map((option) => {
-            const active = option.value === value;
-            return (
-              <li key={option.value} role="option" aria-selected={active}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChange(option.value);
-                    setOpen(false);
-                  }}
-                  className={cn(
-                    "flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-muted",
-                    active && "bg-muted/60 font-medium",
-                  )}
-                >
-                  {option.dotClassName ? (
-                    <span
-                      className={cn("size-2 shrink-0 rounded-full", option.dotClassName)}
-                      aria-hidden
-                    />
-                  ) : null}
-                  {option.label}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
-
-      <span className="sr-only">Selected filter: {selectedLabel}</span>
-    </div>
-  );
+function queryErrorMessage(err: unknown): string {
+  if (err && typeof err === "object" && "message" in err) {
+    const m = (err as APIError).message;
+    if (typeof m === "string" && m.trim()) return m.trim();
+  }
+  return "Could not load cases.";
 }
 
 export function CasesPage() {
+  const orderingFieldId = useId();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<CaseStatusFilter>("all");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [ordering, setOrdering] = useState("");
   const [page, setPage] = useState(1);
 
-  const filteredCases = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return MOCK_CASES.filter((caseRecord) => {
-      const matchesStatus =
-        statusFilter === "all" || caseRecord.status === (statusFilter as CaseStatus);
-      if (!matchesStatus) return false;
-      if (!query) return true;
-      return (
-        caseRecord.patientName.toLowerCase().includes(query) ||
-        caseRecord.caseType.toLowerCase().includes(query)
-      );
-    });
-  }, [search, statusFilter]);
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 350);
+    return () => window.clearTimeout(t);
+  }, [search]);
 
-  const paginatedCases = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return filteredCases.slice(start, start + PAGE_SIZE);
-  }, [filteredCases, page]);
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, ordering]);
+
+  const query = useQuery({
+    queryKey: [
+      ...hospitalMedicalCasesQueryKeyRoot,
+      { search: debouncedSearch, ordering, page },
+    ] as const,
+    queryFn: () =>
+      hospitalService.getMedicalCases({
+        search: debouncedSearch || undefined,
+        ordering: ordering || undefined,
+        page,
+      }),
+    placeholderData: keepPreviousData,
+  });
+
+  const { data, isPending, isError, error, refetch, isFetching, isPlaceholderData } = query;
+
+  const totalPages = useMemo(() => {
+    const count = data?.count ?? 0;
+    if (count <= 0) return 1;
+    return Math.max(1, Math.ceil(count / HOSPITAL_MEDICAL_CASES_PAGE_SIZE));
+  }, [data?.count]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const caseCards = useMemo(
+    () => (data?.results ?? []).map(mapMedicalCaseRowToCaseRecord),
+    [data?.results],
+  );
+
+  const showInitialLoading = isPending && !data;
+  const showFatalListError = isError && data === undefined;
 
   return (
     <div className="mt-12 space-y-8">
-      <DataTableToolbar
-        className="pb-0"
-        primaryAction={<CreatePatientModal triggerClassName="rounded-lg px-4 py-2.5" />}
-        searchPlaceholder="Search cases by..."
-        searchValue={search}
-        onSearchChange={(value) => {
-          setSearch(value);
-          setPage(1);
-        }}
-        showFilter={false}
-        filterControl={
-          <StatusFilterDropdown
-            value={statusFilter}
-            onChange={(value) => {
-              setStatusFilter(value);
-              setPage(1);
-            }}
-          />
-        }
-      />
+      {isError ? (
+        <div
+          className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 sm:flex-row sm:items-center sm:justify-between"
+          role="alert"
+        >
+          <p>{queryErrorMessage(error)}</p>
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0 border-red-300 bg-white text-red-900 hover:bg-red-100"
+            onClick={() => void refetch()}
+            disabled={isFetching}
+          >
+            Retry
+          </Button>
+        </div>
+      ) : null}
 
-      <DataTableBody>
-        <ul className="space-y-5 p-8">
-          {paginatedCases.length === 0 ? (
-            <li className="py-10 text-center text-sm text-muted-foreground">
-              No cases match your search or filter.
-            </li>
+      <DataTableCard>
+        <DataTableToolbar
+          className="pb-0"
+          primaryAction={<CreatePatientModal triggerClassName="rounded-lg px-4 py-2.5" />}
+          searchPlaceholder="Search cases by..."
+          searchValue={search}
+          onSearchChange={setSearch}
+          showFilter={false}
+          filterControl={
+            <SelectField
+              id={orderingFieldId}
+              label="Sort by"
+              labelClassName="sr-only"
+              className="w-full sm:w-auto sm:min-w-[200px]"
+              selectClassName="h-10.5 text-xs shadow-none text-foreground"
+              value={ordering}
+              onChange={(e) => setOrdering(e.target.value)}
+              options={ORDERING_OPTIONS}
+            />
+          }
+        />
+
+        <DataTableBody>
+          {showInitialLoading ? (
+            <div className="flex min-h-[200px] items-center justify-center px-5 py-12 text-sm text-muted-foreground">
+              Loading cases…
+            </div>
+          ) : showFatalListError ? (
+            <div className="flex min-h-[200px] items-center justify-center px-5 py-12 text-center text-sm text-muted-foreground">
+              Case list could not be loaded. Use Retry above, then refresh the page if the problem
+              continues.
+            </div>
           ) : (
-            paginatedCases.map((caseRecord) => (
-              <li key={caseRecord.id}>
-                <CaseCard caseRecord={caseRecord} />
-              </li>
-            ))
+            <>
+              <div
+                className={
+                  isFetching && isPlaceholderData ? "pointer-events-none opacity-60" : undefined
+                }
+              >
+                <ul className="space-y-5 p-8">
+                  {caseCards.length === 0 ? (
+                    <li className="py-10 text-center text-sm text-muted-foreground">
+                      No cases match your search or sort.
+                    </li>
+                  ) : (
+                    caseCards.map((caseRecord) => (
+                      <li key={caseRecord.id}>
+                        <CaseCard caseRecord={caseRecord} />
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </div>
+              <DataTablePagination page={page} totalPages={totalPages} onPageChange={setPage} />
+            </>
           )}
-        </ul>
-        <DataTablePagination page={page} totalPages={TOTAL_PAGES} onPageChange={setPage} />
-      </DataTableBody>
+        </DataTableBody>
+      </DataTableCard>
     </div>
   );
 }

@@ -4,6 +4,8 @@ export type PatientStatus = "Approved" | "Completed" | "Submitted" | "Draft";
 
 export type PatientRecord = {
   id: string;
+  /** Present when the row is tied to a specific case (e.g. hospital my-patients list). */
+  caseRef?: string;
   name: string;
   caseType: string;
   email: string;
@@ -26,6 +28,10 @@ export type PatientDetail = PatientRecord & {
   fundingProgress: string;
   treatmentTimeline: string;
   linkedCases: LinkedCase[];
+  /** Populated from hospital patient detail API (e.g. Cloudinary). */
+  avatarUrl?: string | null;
+  patientIdDocumentUrl?: string | null;
+  doctorReportUrl?: string | null;
 };
 
 export function formatNairaAmount(amount: number): string {

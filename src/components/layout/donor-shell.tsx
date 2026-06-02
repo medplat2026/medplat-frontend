@@ -1,35 +1,38 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DashboardHeader } from "@/components/layout/dashboard-header";
-import { DashboardSidebar } from "@/components/layout/dashboard-sidebar";
+import { DonorHeader } from "@/components/layout/donor-header";
+import { DonorSidebar } from "@/components/layout/donor-sidebar";
+import { MOCK_DONOR_DISPLAY_NAME } from "@/data/mock-donor-dashboard";
 import { getStoredAuthUser } from "@/lib/auth-session";
 import { cn } from "@/lib/utils";
 
-type DashboardShellProps = {
+type DonorShellProps = {
   children: React.ReactNode;
-  /** Shown in sidebar + welcome line */
-  hospitalName?: string;
+  donorName?: string;
 };
 
-export function DashboardShell({ children, hospitalName: hospitalNameProp }: DashboardShellProps) {
-  /** Same on server + first client paint — never read session in the initializer (hydration mismatch). */
-  const [hospitalName, setHospitalName] = useState(() => {
-    if (hospitalNameProp != null && hospitalNameProp !== "") return hospitalNameProp;
-    return "LUTH Hospital";
+export function DonorShell({ children, donorName: donorNameProp }: DonorShellProps) {
+  const [donorName, setDonorName] = useState(() => {
+    if (donorNameProp != null && donorNameProp !== "") return donorNameProp;
+    if (typeof window === "undefined") return MOCK_DONOR_DISPLAY_NAME;
+    const u = getStoredAuthUser();
+    if (u?.full_name?.trim()) return u.full_name.trim();
+    if (u?.email) return u.email;
+    return MOCK_DONOR_DISPLAY_NAME;
   });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
-    if (hospitalNameProp != null && hospitalNameProp !== "") {
-      setHospitalName(hospitalNameProp);
+    if (donorNameProp != null && donorNameProp !== "") {
+      setDonorName(donorNameProp);
       return;
     }
     const u = getStoredAuthUser();
-    if (u?.full_name?.trim()) setHospitalName(u.full_name.trim());
-    else if (u?.email) setHospitalName(u.email);
-  }, [hospitalNameProp]);
+    if (u?.full_name?.trim()) setDonorName(u.full_name.trim());
+    else if (u?.email) setDonorName(u.email);
+  }, [donorNameProp]);
 
   useEffect(() => {
     const closeOnDesktop = () => {
@@ -44,8 +47,8 @@ export function DashboardShell({ children, hospitalName: hospitalNameProp }: Das
 
   return (
     <div className="min-h-screen bg-[#f4f6fb] text-foreground">
-      <DashboardSidebar
-        hospitalName={hospitalName}
+      <DonorSidebar
+        donorName={donorName}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         collapsed={sidebarCollapsed}
@@ -57,11 +60,11 @@ export function DashboardShell({ children, hospitalName: hospitalNameProp }: Das
           sidebarCollapsed ? "lg:pl-[92px]" : "lg:pl-[260px]",
         )}
       >
-        <div data-app-scroll-container="" className="no-scrollbar flex min-h-screen flex-col overflow-y-auto bg-white">
-          <DashboardHeader
-            hospitalName={hospitalName}
-            onMenuClick={() => setSidebarOpen(true)}
-          />
+        <div
+          data-app-scroll-container=""
+          className="no-scrollbar flex min-h-screen flex-col overflow-y-auto bg-white"
+        >
+          <DonorHeader donorName={donorName} onMenuClick={() => setSidebarOpen(true)} />
           <main className="px-4 pb-6 pt-2 md:px-6 md:pb-8 lg:px-8">{children}</main>
         </div>
       </div>

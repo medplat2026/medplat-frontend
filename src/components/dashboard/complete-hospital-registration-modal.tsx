@@ -38,10 +38,14 @@ function documentSpecsFromChoices(
   }));
 }
 
+export type HospitalRegistrationSubmitResult = {
+  profile_completed?: boolean;
+};
+
 export type CompleteHospitalRegistrationModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onComplete: () => void;
+  onComplete: (result?: HospitalRegistrationSubmitResult) => void;
 };
 
 export function CompleteHospitalRegistrationModal({
@@ -225,7 +229,13 @@ export function CompleteHospitalRegistrationModal({
                   ? data.message
                   : "Hospital registration submitted.";
               toast.success(message);
-              onComplete();
+              const profile_completed =
+                typeof data.profile_completed === "boolean"
+                  ? data.profile_completed
+                  : undefined;
+              onComplete(
+                profile_completed === undefined ? undefined : { profile_completed },
+              );
             } catch (error) {
               const { message } = error as APIError;
               toast.error(message);
@@ -287,6 +297,7 @@ function HospitalRegistrationStepOne({
           placeholder="Select the type of healthcare facility"
           defaultValue=""
           options={hospitalTypes}
+          requiredIndicator
         />
       </div>
 
@@ -297,6 +308,7 @@ function HospitalRegistrationStepOne({
           name="licenseNumber"
           label="Registration / License Number"
           placeholder="Enter your valid registration or license number"
+          requiredIndicator
         />
         <ModalFormField
           control="input"
@@ -305,6 +317,7 @@ function HospitalRegistrationStepOne({
           label="Contact Person Name"
           placeholder="Full name of the primary contact person"
           autoComplete="name"
+          requiredIndicator
         />
       </div>
 
@@ -317,6 +330,7 @@ function HospitalRegistrationStepOne({
           label="Contact Email"
           placeholder="hospital@email.com"
           autoComplete="email"
+          requiredIndicator
         />
         <ModalFormField
           control="input"
@@ -326,6 +340,7 @@ function HospitalRegistrationStepOne({
           label="Contact Phone No."
           placeholder="+(234)-0000-0000"
           autoComplete="tel"
+          requiredIndicator
         />
       </div>
 
@@ -354,16 +369,18 @@ function HospitalRegistrationStepOne({
           id={`${formId}-state`}
           name="state"
           label="State"
-          placeholder="State (optional)"
+          placeholder="State"
           autoComplete="address-level1"
+          requiredIndicator
         />
         <ModalFormField
           control="input"
           id={`${formId}-postal-code`}
           name="postalCode"
           label="Postal Code"
-          placeholder="Postal code (optional)"
+          placeholder="Postal code"
           autoComplete="postal-code"
+          requiredIndicator
         />
       </div>
     </div>
@@ -431,8 +448,9 @@ function HospitalRegistrationStepTwo({
           name="bedCapacity"
           type="number"
           min={0}
-          label="Bed Capacity (Optional)"
+          label="Bed Capacity"
           placeholder="Enter the number of available beds"
+          requiredIndicator
         />
       </div>
 

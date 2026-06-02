@@ -24,9 +24,11 @@ export function HospitalRegistrationFlow() {
     setPromptOpen(shouldShowHospitalProfileCompletionModal());
   }, []);
 
-  function handleRegistrationComplete() {
+  function handleRegistrationComplete(result?: { profile_completed?: boolean }) {
     markHospitalProfileComplete();
-    updateStoredHospitalProfileCompleted(true);
+    if (typeof result?.profile_completed === "boolean") {
+      updateStoredHospitalProfileCompleted(result.profile_completed);
+    }
     setPromptOpen(false);
     setFormOpen(false);
     setSuccessOpen(true);

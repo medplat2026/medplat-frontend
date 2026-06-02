@@ -18,6 +18,14 @@ export const ROUTES = {
     notifications: "/patient/dashboard/notifications",
     settings: "/patient/dashboard/settings",
   },
+  donor: {
+    /** Case overview (donor home). */
+    dashboard: "/donor/dashboard",
+    viewDetails: "/donor/dashboard/view-details",
+    makeDonations: "/donor/dashboard/make-donations",
+    notifications: "/donor/dashboard/notifications",
+    settings: "/donor/dashboard/settings",
+  },
   onboarding: {
     hospital: {
       email: "/onboarding/hospital/email",

@@ -2,6 +2,19 @@ import { HOSPITAL_PROFILE_STORAGE } from "@/constants/onboarding";
 import { getStoredAuthUser } from "@/lib/auth-session";
 import type { AuthUser } from "@/types/auth";
 
+/** Prefer `hospital_profile_completed`, else `profile_completed` from login / API user. */
+export function hospitalProfileCompletedFromAuthUser(
+  user: AuthUser,
+): boolean | undefined {
+  if (user.hospital_profile_completed === true || user.profile_completed === true) {
+    return true;
+  }
+  if (user.hospital_profile_completed === false || user.profile_completed === false) {
+    return false;
+  }
+  return undefined;
+}
+
 export function hospitalProfileNeedsCompletion(): boolean {
   if (typeof window === "undefined") return false;
   if (window.sessionStorage.getItem(HOSPITAL_PROFILE_STORAGE.complete) === "true") return false;
@@ -10,13 +23,18 @@ export function hospitalProfileNeedsCompletion(): boolean {
 
 /**
  * Whether to show the hospital profile completion prompt on the dashboard.
- * Prefer login snapshot `hospital_profile_completed`; fall back to session flags from signup.
+ * Hidden when the login snapshot says the profile is complete, or when this session already
+ * finished the registration wizard (`complete` in sessionStorage). Otherwise shown if the server
+ * marks the profile incomplete or onboarding set `needsCompletion`.
  */
 export function shouldShowHospitalProfileCompletionModal(): boolean {
   if (typeof window === "undefined") return false;
   const u = getStoredAuthUser();
   if (!u || u.user_type !== "hospital") return false;
   if (u.hospital_profile_completed === true) return false;
+  if (window.sessionStorage.getItem(HOSPITAL_PROFILE_STORAGE.complete) === "true") {
+    return false;
+  }
   if (u.hospital_profile_completed === false) return true;
   return hospitalProfileNeedsCompletion();
 }
@@ -28,9 +46,10 @@ export function syncHospitalProfileFlagsFromLoginUser(user: AuthUser): void {
     clearHospitalProfileCompletionFlags();
     return;
   }
-  if (user.hospital_profile_completed === true) {
+  const completed = hospitalProfileCompletedFromAuthUser(user);
+  if (completed === true) {
     markHospitalProfileComplete();
-  } else {
+  } else if (completed === false) {
     markHospitalProfileNeedsCompletion();
   }
 }

@@ -27,6 +27,7 @@ import {
   buildHospitalCreatePatientStep1Payload,
   buildHospitalCreatePatientStep2FormData,
   hospitalDashboardQueryKey,
+  hospitalMyPatientsQueryKeyRoot,
   hospitalService,
 } from "@/services/hospital.service";
 import type { APIError } from "@/types/api";
@@ -203,6 +204,7 @@ export function CreatePatientModal({ triggerClassName }: CreatePatientModalProps
         strictRequired,
       );
       await hospitalService.postCreatePatientStep2(multipartBody);
+      await queryClient.invalidateQueries({ queryKey: hospitalMyPatientsQueryKeyRoot });
       const fullName = String(formData.get("fullName") ?? "");
       if (submitCase) {
         await queryClient.invalidateQueries({ queryKey: hospitalDashboardQueryKey });

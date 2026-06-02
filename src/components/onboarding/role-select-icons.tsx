@@ -47,3 +47,35 @@ export function PatientRoleIcon({ className }: { className?: string }) {
     </svg>
   );
 }
+
+export function DonorRoleIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 80 80"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+    >
+      <path
+        d="M40 68c-8 0-14-6-14-14 0-10 8-18 14-26 6 8 14 16 14 26 0 8-6 14-14 14Z"
+        fill="#F5E6FF"
+        stroke="#7C3AED"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M40 22c-6 0-10 4-10 10 0 6 4 10 10 10s10-4 10-10c0-6-4-10-10-10Z"
+        fill="#EDE9FE"
+        stroke="#6D28D9"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M34 36c2 4 6 6 6 6s4-2 6-6"
+        stroke="#7C3AED"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}

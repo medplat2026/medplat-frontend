@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useEffect, useId, useMemo, useState } from "react";
 import { CreateCaseModal } from "@/components/dashboard/create-case-modal";
 import { CreatePatientModal } from "@/components/dashboard/create-patient-modal";
-import { ROUTES } from "@/constants/routes";
-import { MOCK_PATIENTS } from "@/data/mock-patients";
 import {
   DataTable,
   DataTableBody,
@@ -15,6 +14,16 @@ import {
   type DataTableColumn,
 } from "@/components/ui/data-table";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { SelectField, type SelectOption } from "@/components/ui/select-field";
+import { Button } from "@/components/ui/Button";
+import { ROUTES } from "@/constants/routes";
+import {
+  HOSPITAL_MY_PATIENTS_PAGE_SIZE,
+  hospitalMyPatientsQueryKeyRoot,
+  hospitalService,
+  mapHospitalMyPatientRowToPatientRecord,
+} from "@/services/hospital.service";
+import type { APIError } from "@/types/api";
 import {
   formatNairaAmount,
   statusToBadgeVariant,
@@ -22,7 +31,19 @@ import {
   type PatientRecord,
 } from "@/types/patient";
 
-const TOTAL_PAGES = 25;
+const ORDERING_OPTIONS: SelectOption[] = [
+  { value: "", label: "Default sort" },
+  { value: "-created_at", label: "Newest first" },
+  { value: "created_at", label: "Oldest first" },
+];
+
+function queryErrorMessage(err: unknown): string {
+  if (err && typeof err === "object" && "message" in err) {
+    const m = (err as APIError).message;
+    if (typeof m === "string" && m.trim()) return m.trim();
+  }
+  return "Could not load patients.";
+}
 
 function EyeIcon({ className }: { className?: string }) {
   return (
@@ -114,44 +135,121 @@ const patientColumns: DataTableColumn<PatientRecord>[] = [
 ];
 
 export function PatientsPage() {
+  const orderingFieldId = useId();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [ordering, setOrdering] = useState("");
   const [page, setPage] = useState(1);
 
-  const filteredPatients = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return MOCK_PATIENTS;
-    return MOCK_PATIENTS.filter(
-      (p) =>
-        p.name.toLowerCase().includes(query) ||
-        p.caseType.toLowerCase().includes(query) ||
-        p.email.toLowerCase().includes(query),
-    );
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 350);
+    return () => window.clearTimeout(t);
   }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, ordering]);
+
+  const query = useQuery({
+    queryKey: [...hospitalMyPatientsQueryKeyRoot, { search: debouncedSearch, ordering, page }] as const,
+    queryFn: () =>
+      hospitalService.getMyPatients({
+        search: debouncedSearch || undefined,
+        ordering: ordering || undefined,
+        page,
+      }),
+    placeholderData: keepPreviousData,
+  });
+
+  const { data, isPending, isError, error, refetch, isFetching, isPlaceholderData } = query;
+
+  const totalPages = useMemo(() => {
+    const count = data?.count ?? 0;
+    if (count <= 0) return 1;
+    return Math.max(1, Math.ceil(count / HOSPITAL_MY_PATIENTS_PAGE_SIZE));
+  }, [data?.count]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const rows = useMemo(
+    () => (data?.results ?? []).map(mapHospitalMyPatientRowToPatientRecord),
+    [data?.results],
+  );
+
+  const showInitialLoading = isPending && !data;
+  const showFatalListError = isError && data === undefined;
 
   return (
     <div className="mt-12">
+      {isError ? (
+        <div
+          className="mb-4 flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 sm:flex-row sm:items-center sm:justify-between"
+          role="alert"
+        >
+          <p>{queryErrorMessage(error)}</p>
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0 border-red-300 bg-white text-red-900 hover:bg-red-100"
+            onClick={() => void refetch()}
+            disabled={isFetching}
+          >
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
       <DataTableCard>
         <DataTableToolbar
           primaryAction={<CreatePatientModal triggerClassName="rounded-lg px-4 py-2.5" />}
           searchPlaceholder="Search patients"
           searchValue={search}
-          onSearchChange={(value) => {
-            setSearch(value);
-            setPage(1);
-          }}
+          onSearchChange={setSearch}
+          showFilter={false}
+          filterControl={
+            <SelectField
+              id={orderingFieldId}
+              label="Sort by"
+              labelClassName="sr-only"
+              className="w-full sm:w-auto sm:min-w-[200px]"
+              selectClassName="h-10.5 text-xs shadow-none text-foreground"
+              value={ordering}
+              onChange={(e) => setOrdering(e.target.value)}
+              options={ORDERING_OPTIONS}
+            />
+          }
         />
         <DataTableBody>
-          <DataTable
-            columns={patientColumns}
-            data={filteredPatients}
-            keyExtractor={(row) => row.id}
-            emptyMessage="No patients match your search."
-          />
-          <DataTablePagination
-            page={page}
-            totalPages={TOTAL_PAGES}
-            onPageChange={setPage}
-          />
+          {showInitialLoading ? (
+            <div className="flex min-h-[200px] items-center justify-center px-5 py-12 text-sm text-muted-foreground">
+              Loading patients…
+            </div>
+          ) : showFatalListError ? (
+            <div className="flex min-h-[200px] items-center justify-center px-5 py-12 text-center text-sm text-muted-foreground">
+              Patient list could not be loaded. Use Retry above, then refresh the page if the problem
+              continues.
+            </div>
+          ) : (
+            <>
+              <div
+                className={
+                  isFetching && isPlaceholderData ? "pointer-events-none opacity-60" : undefined
+                }
+              >
+                <DataTable
+                  columns={patientColumns}
+                  data={rows}
+                  keyExtractor={(row) => (row.caseRef ? `${row.id}-${row.caseRef}` : row.id)}
+                  emptyMessage="No patients match your search."
+                />
+              </div>
+              <DataTablePagination page={page} totalPages={totalPages} onPageChange={setPage} />
+            </>
+          )}
         </DataTableBody>
       </DataTableCard>
     </div>

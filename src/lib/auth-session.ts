@@ -1,5 +1,6 @@
 /** Browser keys for auth returned by POST `/auth/login/`. */
 
+import { HOSPITAL_PROFILE_STORAGE } from "@/constants/onboarding";
 import type { LoginResponse } from "@/types/auth";
 
 const ACCESS_KEYS = ["access", "access_token", "token", "auth_token"];
@@ -59,8 +60,11 @@ export function persistLoginSession(
   const full_name = typeof u.full_name === "string" ? u.full_name : "";
   const user_type = typeof u.user_type === "string" ? u.user_type : "";
   if (!email || !Number.isFinite(id)) return;
-  const hospital_profile_completed =
-    u.hospital_profile_completed === true ? true : u.hospital_profile_completed === false ? false : undefined;
+  const hospital_profile_completed = (() => {
+    if (u.hospital_profile_completed === true || u.profile_completed === true) return true;
+    if (u.hospital_profile_completed === false || u.profile_completed === false) return false;
+    return undefined;
+  })();
   const snapshot: StoredAuthUser = {
     id,
     email,
@@ -101,12 +105,15 @@ export function clearAuthSession(): void {
   localStorage.removeItem(LS_ACCESS);
   localStorage.removeItem(LS_REFRESH);
   localStorage.removeItem(LS_USER);
+  window.sessionStorage.removeItem(HOSPITAL_PROFILE_STORAGE.needsCompletion);
+  window.sessionStorage.removeItem(HOSPITAL_PROFILE_STORAGE.complete);
 }
 
-function normalizeRoleHint(value: unknown): "hospital" | "patient" | null {
+function normalizeRoleHint(value: unknown): "hospital" | "patient" | "donor" | null {
   if (typeof value !== "string") return null;
   const s = value.toLowerCase();
   if (s.includes("patient") || s === "p") return "patient";
+  if (s.includes("donor")) return "donor";
   if (s.includes("hospital") || s === "h" || s.includes("provider"))
     return "hospital";
   return null;
@@ -114,10 +121,12 @@ function normalizeRoleHint(value: unknown): "hospital" | "patient" | null {
 
 function portalFromObject(
   o: Record<string, unknown>,
-): "hospital" | "patient" | null {
+): "hospital" | "patient" | "donor" | null {
   if (o.user_type === "hospital") return "hospital";
   if (o.user_type === "patient") return "patient";
+  if (o.user_type === "donor") return "donor";
   if (o.is_patient === true) return "patient";
+  if (o.is_donor === true) return "donor";
   if (o.is_hospital === true) return "hospital";
   return (
     normalizeRoleHint(o.user_type) ??
@@ -129,11 +138,11 @@ function portalFromObject(
 
 /**
  * Best-effort portal from login JSON (shape varies by backend).
- * When unknown, the UI sends the user to home to pick hospital vs patient.
+ * When unknown, the UI sends the user to home to pick a portal.
  */
 export function inferPortalFromLoginData(
   data: Record<string, unknown>,
-): "hospital" | "patient" | null {
+): "hospital" | "patient" | "donor" | null {
   const direct = portalFromObject(data);
   if (direct) return direct;
   const user = data.user;

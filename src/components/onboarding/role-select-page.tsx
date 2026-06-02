@@ -8,10 +8,10 @@ import { OnboardingHeading } from "@/components/onboarding/onboarding-heading";
 import { OnboardingHeroImage } from "@/components/onboarding/onboarding-hero-image";
 import { OnboardingScaffold } from "@/components/onboarding/onboarding-scaffold";
 import { RoleOptionCard } from "@/components/onboarding/role-option-card";
-import { HospitalRoleIcon, PatientRoleIcon } from "@/components/onboarding/role-select-icons";
+import { DonorRoleIcon, HospitalRoleIcon, PatientRoleIcon } from "@/components/onboarding/role-select-icons";
 import { cn } from "@/lib/utils";
 
-type Role = "hospital" | "patient";
+type Role = "hospital" | "patient" | "donor";
 
 export function RoleSelectPage() {
   const router = useRouter();
@@ -23,12 +23,16 @@ export function RoleSelectPage() {
       router.push(ROUTES.onboarding.hospital.email);
       return;
     }
-    router.push(ROUTES.onboarding.patient.email);
+    if (role === "patient") {
+      router.push(ROUTES.onboarding.patient.email);
+      return;
+    }
+    router.push(ROUTES.donor.dashboard);
   };
 
   return (
     <OnboardingScaffold
-      contentWidthClass="max-w-3xl"
+      contentWidthClass="max-w-4xl"
       hero={
         <OnboardingHeroImage alt="Medical professionals collaborating" carouselActiveIndex={0} />
       }
@@ -46,7 +50,7 @@ export function RoleSelectPage() {
               Select your role to access the right dashboard.
             </p>
           </div>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <RoleOptionCard
               title="Hospital / Healthcare Provider"
               description="Register your facility, manage patients, and receive referrals."
@@ -60,6 +64,13 @@ export function RoleSelectPage() {
               selected={role === "patient"}
               onSelect={() => setRole("patient")}
               icon={<PatientRoleIcon />}
+            />
+            <RoleOptionCard
+              title="Donor / Supporter"
+              description="Browse verified cases, follow updates, and contribute to care."
+              selected={role === "donor"}
+              onSelect={() => setRole("donor")}
+              icon={<DonorRoleIcon />}
             />
           </div>
           <Button
